@@ -207,14 +207,16 @@ export function apply(ctx: Context, config: Config = {}): void {
       tempPath = resolved.tempPath
       const before = readProfileState(profileDir)
       const pmResult = await packageManager.install(profileDir, resolved.spec)
-      if (!pmResult.ok) {
-        appendOperationLog(profileDir, action, entry.packageName, entry.version, false, pmResult.output)
-        return failure(action, entry.packageName, entry.version, 'install-failed', pmResult.output)
-      }
       const after = readProfileState(profileDir)
       // pnpm records the dependency under the package's real name; the git spec
       // is only the source. Diff against the pre-install set to find it.
       const added = [...after.plugins.installedNames].filter(name => !before.plugins.installedNames.has(name))
+      // A non-zero exit from ignored build scripts still leaves the dependency
+      // installed; only fail when pnpm errored AND nothing was actually added.
+      if (added.length === 0 && !pmResult.ok) {
+        appendOperationLog(profileDir, action, entry.packageName, entry.version, false, pmResult.output)
+        return failure(action, entry.packageName, entry.version, 'install-failed', pmResult.output)
+      }
       const packageName = added[0] ?? resolvedName(after, entry)
       writeProfileState(
         profileDir,
