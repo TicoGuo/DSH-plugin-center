@@ -1,4 +1,4 @@
-# @ticoguo/dsh-plugin-center
+# @TicoGuo/dsh-plugin-center
 
 > DeepSeek Harness（`dsh`）的插件中心 —— 在对话界面里一键发现、安装、更新、管理社区插件。
 
