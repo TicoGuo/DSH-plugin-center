@@ -90,11 +90,8 @@ function actionButtons(entry: PluginCenterEntry): readonly ActionKind[] {
 
 /** The Plugin Center conversation view. */
 export function PluginCenterView({
-  t, onClose, list, refresh, install, uninstall, update, setEnabled,
-}: InjectFace<PluginCenterViewInjected> & PropsLocale<'pluginCenter'> & {
-  /** Close the Plugin Center overlay (return to the conversation). */
-  onClose: () => void
-}): ReactNode {
+  t, list, refresh, install, uninstall, update, setEnabled,
+}: InjectFace<PluginCenterViewInjected> & PropsLocale<'pluginCenter'>): ReactNode {
   const [state, setState] = useState<ViewState>({ status: 'loading' })
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<PluginCenterFilter>('all')
@@ -192,9 +189,6 @@ export function PluginCenterView({
           </label>
           <button type="button" className={css.refresh} title={t('refresh')} aria-label={t('refresh')} onClick={runRefresh}>
             <IconRefreshOutline16 aria-hidden="true" />
-          </button>
-          <button type="button" className={css.backButton} onClick={onClose}>
-            {t('backToChat')}
           </button>
         </div>
       </header>

@@ -118,8 +118,8 @@
 .tabs {
   display: flex;
   gap: 36px;
+  margin-top: 4px;
   padding-left: 8px;
-  border-bottom: 1px solid var(--dsw-alias-border-l2);
 }
 
 .tab {
@@ -127,7 +127,6 @@
   padding: 0 0 11px;
   border: none;
   background: transparent;
-  font: inherit;
   font-size: 13px;
   line-height: 16px;
   font-weight: 500;
@@ -139,7 +138,7 @@
   content: '';
   position: absolute;
   right: 0;
-  bottom: -1px;
+  bottom: 1px;
   left: 0;
   height: 2px;
   border-radius: 2px;
@@ -156,26 +155,6 @@
 
 .tabActive::after {
   background: var(--dsw-alias-state-business-primary);
-}
-
-.backButton {
-  appearance: none;
-  border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
-  padding: 5px 14px;
-  background: var(--dsw-alias-bg-layer-1);
-  color: var(--dsw-alias-label-primary);
-  font: inherit;
-  font-size: 12px;
-  line-height: 18px;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: border-color .16s, background .16s;
-}
-
-.backButton:hover {
-  border-color: var(--dsw-alias-label-dimmed);
-  background: var(--dsw-alias-interactive-bg-hover);
 }
 
 /* ── status / banner / failure ──────────────────────────────────────────── */
