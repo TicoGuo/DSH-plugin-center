@@ -1,9 +1,9 @@
-/** Plugin Center view: toolbar (search/filter/refresh), card grid, detail expansion, and mutation feedback. */
+/** Plugin Center view: header, filter pills, card grid, detail expansion, and mutation feedback. */
 import type { ReactNode } from 'react';
 import type { PluginCenterSnapshot, PluginOperationResult } from '@ticoguo/dsh-plugin-center/types';
 import type { ConvViewProps } from '@deepseek-ai/dsh-client-ui-conversation/client';
 import type { InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots';
-/** The list/refresh payload: the snapshot plus an optional GitHub load error. */
+/** The list/refresh payload: the snapshot plus an optional load error. */
 export type PluginCenterListResult = PluginCenterSnapshot & {
     readonly error: string | null;
 };

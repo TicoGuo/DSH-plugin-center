@@ -30,6 +30,9 @@ export type PluginCenterKey =
   | 'detail.changelog'
   | 'detail.requirements'
   | 'detail.requirementsEmpty'
+  | 'detail.description'
+  | 'detail.stars'
+  | 'detail.installCommand'
   | 'confirm.uninstallTitle'
   | 'confirm.uninstallBody'
   | 'confirm.cancel'
@@ -85,6 +88,9 @@ export const zh: Record<PluginCenterKey, string> = {
   'detail.changelog': '更新日志',
   'detail.requirements': '依赖要求',
   'detail.requirementsEmpty': '无额外依赖要求',
+  'detail.description': '简介',
+  'detail.stars': '星标',
+  'detail.installCommand': '安装命令',
   'confirm.uninstallTitle': '卸载插件',
   'confirm.uninstallBody': '确定要卸载「{name}」吗？将清理插件文件和数据。',
   'confirm.cancel': '取消',
@@ -134,6 +140,9 @@ export const en: Record<PluginCenterKey, string> = {
   'detail.changelog': 'Changelog',
   'detail.requirements': 'Requirements',
   'detail.requirementsEmpty': 'No additional requirements',
+  'detail.description': 'About',
+  'detail.stars': 'Stars',
+  'detail.installCommand': 'Install command',
   'confirm.uninstallTitle': 'Uninstall plugin',
   'confirm.uninstallBody': 'Uninstall "{name}"? Plugin files and data will be removed.',
   'confirm.cancel': 'Cancel',

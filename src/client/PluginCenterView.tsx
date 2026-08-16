@@ -1,4 +1,4 @@
-/** Plugin Center view: toolbar (search/filter/refresh), card grid, detail expansion, and mutation feedback. */
+/** Plugin Center view: header, filter pills, card grid, detail expansion, and mutation feedback. */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
@@ -17,7 +17,7 @@ import {
 } from './plugin-center-store.ts'
 import css from './PluginCenterView.module.css'
 
-/** The list/refresh payload: the snapshot plus an optional GitHub load error. */
+/** The list/refresh payload: the snapshot plus an optional load error. */
 export type PluginCenterListResult = PluginCenterSnapshot & { readonly error: string | null }
 
 /** Session-independent controls supplied by the registration's inject factory. */
@@ -72,6 +72,12 @@ const SUCCESS_TOAST_KEY = {
   enable: 'toast.enable',
   disable: 'toast.disable',
 } as const satisfies Record<ActionKind, PluginCenterKey>
+
+/** Format a star count compactly (20008 → "20.0k"). */
+function formatStars(stars: number): string {
+  if (stars >= 1000) return `${(stars / 1000).toFixed(1)}k`
+  return String(stars)
+}
 
 /** Build one card's action buttons for the entry's current state. */
 function actionButtons(entry: PluginCenterEntry): readonly ActionKind[] {
@@ -162,14 +168,14 @@ export function PluginCenterView({
 
   return (
     <div className={css.root} data-plugin-center="">
-      <div className={css.toolbar} role="toolbar" aria-label={t('toolbar.aria')}>
+      <header className={css.header}>
         <div className={css.titleRow}>
           <h2 className={css.title}>{t('view.pluginCenter')}</h2>
           {snapshot !== undefined && (
             <span className={css.stats}>{t('stats', { installed: snapshot.installedCount, total: snapshot.totalCount })}</span>
           )}
         </div>
-        <div className={css.controls}>
+        <div className={css.headerControls}>
           <label className={css.search}>
             <IconSearchOutline16 aria-hidden="true" />
             <input
@@ -180,21 +186,25 @@ export function PluginCenterView({
               onChange={(event) => { setQuery(event.currentTarget.value) }}
             />
           </label>
-          <select
-            className={css.filter}
-            value={filter}
-            aria-label={t('filter.all')}
-            onChange={(event) => { setFilter(event.currentTarget.value as PluginCenterFilter) }}
-          >
-            {PLUGIN_CENTER_FILTERS.map(option => (
-              <option key={option} value={option}>{t(FILTER_LABEL_KEY[option])}</option>
-            ))}
-          </select>
-          <button type="button" className={css.refresh} onClick={runRefresh}>
-            <IconRefreshOutline16 size={14} aria-hidden="true" />
-            <span>{t('refresh')}</span>
+          <button type="button" className={css.refresh} title={t('refresh')} aria-label={t('refresh')} onClick={runRefresh}>
+            <IconRefreshOutline16 aria-hidden="true" />
           </button>
         </div>
+      </header>
+
+      <div className={css.filters} role="tablist" aria-label={t('filter.all')}>
+        {PLUGIN_CENTER_FILTERS.map(option => (
+          <button
+            key={option}
+            type="button"
+            role="tab"
+            aria-selected={filter === option}
+            className={filter === option ? css.filterActive : css.filterPill}
+            onClick={() => { setFilter(option) }}
+          >
+            {t(FILTER_LABEL_KEY[option])}
+          </button>
+        ))}
       </div>
 
       {loadError !== null ? <p className={css.banner} role="alert">{t('githubError', { message: loadError })}</p> : null}
@@ -218,55 +228,58 @@ export function PluginCenterView({
             const busy = pending.has(entry.id)
             return (
               <li key={entry.id} className={css.card} data-open={open || undefined}>
-                <div className={css.cardBody}>
-                  <button
-                    type="button"
-                    className={css.cardContent}
-                    aria-expanded={open}
-                    onClick={() => { setExpandedId(current => current === entry.id ? null : entry.id) }}
-                  >
-                    <span className={css.icon} aria-hidden="true">{entry.icon}</span>
-                    <span className={css.cardMain}>
-                      <span className={css.cardTitleRow}>
-                        <strong className={css.cardTitle}>{entry.name}</strong>
-                        {entry.version !== '' && <span className={css.version}>{entry.version}</span>}
-                      </span>
-                      <span className={css.description}>{entry.description}</span>
+                <button
+                  type="button"
+                  className={css.cardContent}
+                  aria-expanded={open}
+                  onClick={() => { setExpandedId(current => current === entry.id ? null : entry.id) }}
+                >
+                  <span className={css.icon} aria-hidden="true">{entry.icon}</span>
+                  <span className={css.cardMain}>
+                    <span className={css.nameRow}>
+                      <strong className={css.cardTitle}>{entry.name}</strong>
+                      {entry.stars > 0 && (
+                        <span className={css.stars} title={t('detail.stars')}>★ {formatStars(entry.stars)}</span>
+                      )}
                     </span>
-                    <span className={css.cardTrailing}>
-                      <span className={css.statusTag} data-state={entry.state}>{t(STATUS_LABEL_KEY[entry.state])}</span>
-                      <IconChevronDownOutline14 className={css.chevron} size={12} aria-hidden="true" />
-                    </span>
-                  </button>
-                  <div className={css.actions}>
-                    {actionButtons(entry).map(kind => (
-                      <button
-                        key={kind}
-                        type="button"
-                        disabled={busy}
-                        data-action={kind}
-                        onClick={() => { invoke(entry.id, kind) }}
-                      >
-                        {busy ? t('loading') : t(ACTION_LABEL_KEY[kind])}
-                      </button>
-                    ))}
-                  </div>
+                    <span className={css.author}>{entry.author}</span>
+                    <span className={css.description}>{entry.description}</span>
+                  </span>
+                  <span className={css.cardTrailing}>
+                    <span className={css.statusTag} data-state={entry.state}>{t(STATUS_LABEL_KEY[entry.state])}</span>
+                    <IconChevronDownOutline14 className={css.chevron} size={14} aria-hidden="true" />
+                  </span>
+                </button>
+                <div className={css.actions}>
+                  {actionButtons(entry).map(kind => (
+                    <button
+                      key={kind}
+                      type="button"
+                      disabled={busy}
+                      data-action={kind}
+                      onClick={() => { invoke(entry.id, kind) }}
+                    >
+                      {busy ? t('loading') : t(ACTION_LABEL_KEY[kind])}
+                    </button>
+                  ))}
                 </div>
                 {open ? (
                   <div className={css.details}>
                     <dl>
-                      <div><dt>{t('detail.version')}</dt><dd>{entry.version || '—'}</dd></div>
-                      <div><dt>{t('detail.installedVersion')}</dt><dd>{entry.installedVersion ?? '—'}</dd></div>
+                      <div><dt>{t('detail.description')}</dt><dd>{entry.description}</dd></div>
                       <div><dt>{t('detail.author')}</dt><dd>{entry.author}</dd></div>
+                      <div><dt>{t('detail.stars')}</dt><dd>{entry.stars}</dd></div>
                       <div>
                         <dt>{t('detail.repository')}</dt>
                         <dd><a href={entry.repository} target="_blank" rel="noreferrer">{entry.repository}</a></dd>
                       </div>
-                      <div><dt>{t('detail.changelog')}</dt><dd>{entry.changelog}</dd></div>
                       <div>
-                        <dt>{t('detail.requirements')}</dt>
-                        <dd>{entry.requirements.length > 0 ? entry.requirements.join('、') : t('detail.requirementsEmpty')}</dd>
+                        <dt>{t('detail.installCommand')}</dt>
+                        <dd><code>{`dsh plugin add ${entry.packageName}`}</code></dd>
                       </div>
+                      {entry.installedVersion !== null && (
+                        <div><dt>{t('detail.installedVersion')}</dt><dd>{entry.installedVersion}</dd></div>
+                      )}
                     </dl>
                   </div>
                 ) : null}
