@@ -168,7 +168,7 @@ export function PluginCenterView({
   }
 
   return (
-    <div className={css.root} data-plugin-center="">
+    <>
       <div className={css.stickyBar}>
       <header className={css.header}>
         <div className={css.titleRow}>
@@ -209,7 +209,8 @@ export function PluginCenterView({
         ))}
       </div>
       </div>
-
+      <div className={css.root} data-plugin-center="">
+        <div className={css.content}>
       {loadError !== null ? <p className={css.banner} role="alert">{t('githubError', { message: loadError })}</p> : null}
       {state.status === 'loading' ? <p className={css.status}>{t('loading')}</p> : null}
       {state.status === 'error' ? (
@@ -317,6 +318,8 @@ export function PluginCenterView({
           <p>{t('confirm.uninstallBody', { name: confirmEntry.name })}</p>
         </Modal>
       )}
-    </div>
+        </div>
+      </div>
+    </>
   )
 }
