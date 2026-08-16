@@ -91,8 +91,11 @@ function actionButtons(entry: PluginCenterEntry): readonly ActionKind[] {
 
 /** The Plugin Center conversation view. */
 export function PluginCenterView({
-  t, list, refresh, install, uninstall, update, setEnabled,
-}: ConvViewProps & InjectFace<PluginCenterViewInjected> & PropsLocale<'pluginCenter'>): ReactNode {
+  t, switchView, list, refresh, install, uninstall, update, setEnabled,
+}: ConvViewProps & InjectFace<PluginCenterViewInjected> & PropsLocale<'pluginCenter'> & {
+  /** Switch the session's active conversation view (back to 'chat'). */
+  switchView?: (viewId: string) => void
+}): ReactNode {
   const [state, setState] = useState<ViewState>({ status: 'loading' })
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<PluginCenterFilter>('all')
@@ -191,17 +194,20 @@ export function PluginCenterView({
           <button type="button" className={css.refresh} title={t('refresh')} aria-label={t('refresh')} onClick={runRefresh}>
             <IconRefreshOutline16 aria-hidden="true" />
           </button>
+          <button type="button" className={css.backButton} onClick={() => { switchView?.('chat') }}>
+            {t('backToChat')}
+          </button>
         </div>
       </header>
 
-      <div className={css.filters} role="tablist" aria-label={t('filter.all')}>
+      <div className={css.tabs} role="tablist" aria-label={t('filter.all')}>
         {PLUGIN_CENTER_FILTERS.map(option => (
           <button
             key={option}
             type="button"
             role="tab"
             aria-selected={filter === option}
-            className={filter === option ? css.filterActive : css.filterPill}
+            className={filter === option ? css.tabActive : css.tab}
             onClick={() => { setFilter(option); setExpandedId(null); setConfirmEntry(null) }}
           >
             {t(FILTER_LABEL_KEY[option])}

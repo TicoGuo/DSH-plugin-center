@@ -13,6 +13,7 @@ export type PluginCenterKey =
   | 'filter.updatable'
   | 'filter.disabled'
   | 'refresh'
+  | 'backToChat'
   | 'stats'
   | 'status.notInstalled'
   | 'status.enabled'
@@ -73,6 +74,7 @@ export const zh: Record<PluginCenterKey, string> = {
   'filter.updatable': '可更新',
   'filter.disabled': '已停用',
   'refresh': '检查更新',
+  'backToChat': '返回对话',
   'stats': '已安装 {installed} / {total}',
   'status.notInstalled': '未安装',
   'status.enabled': '已启用',
@@ -127,6 +129,7 @@ export const en: Record<PluginCenterKey, string> = {
   'filter.updatable': 'Updatable',
   'filter.disabled': 'Disabled',
   'refresh': 'Check updates',
+  'backToChat': 'Back to chat',
   'stats': 'Installed {installed} / {total}',
   'status.notInstalled': 'Not installed',
   'status.enabled': 'Enabled',
