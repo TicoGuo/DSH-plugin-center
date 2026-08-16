@@ -15,8 +15,11 @@ import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 // Type-only: the settings-plugins section's `settings.plugin.item` SlotMap merge.
 import type {} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
+// Type-only: the sidebar's `sidebar.header.action` SlotMap merge.
+import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import { PluginCenterView, type PluginCenterListResult, type PluginCenterViewInjected } from './PluginCenterView.tsx'
 import { PluginCenterCard } from './PluginCenterCard.tsx'
+import { PluginCenterSidebarButton } from './PluginCenterSidebarButton.tsx'
 import { PluginCenterCardController, type PluginCenterSettings } from './plugin-center-card.ts'
 import { en, NS, zh } from './locales.ts'
 
@@ -99,4 +102,19 @@ export function apply(ctx: Context): void {
     locale: NS,
     inject: () => card.inject(),
   }, PluginCenterCard))
+
+  // Sidebar entry: a button above the workspace that flips the main panel to
+  // the Plugin Center view (and the view's 返回对话 button flips it back).
+  ctx.slots.inject('sidebar.header.action', () => ctx.slots.register({
+    name: 'sidebar.header.action',
+    id: 'plugin-center',
+    order: 20,
+    locale: NS,
+    inject: () => ({
+      open: () => {
+        const switcher = ctx.get('conversationViewSwitch') as { switch: (viewId: string) => void } | undefined
+        switcher?.switch('plugin-center')
+      },
+    }),
+  }, PluginCenterSidebarButton))
 }
