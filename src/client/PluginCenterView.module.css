@@ -121,9 +121,19 @@
   z-index: 2;
   display: flex;
   flex-direction: column;
-  padding: 12px 0 0;
-  background: var(--dsw-alias-bg-layer-1);
-  border-bottom: 1px solid var(--dsw-alias-border-l2);
+  padding: 12px 0 1px;
+  background: var(--dsw-alias-bg-base);
+}
+
+.stickyBar::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 1px;
+  background: var(--dsw-alias-border-l2);
+  pointer-events: none;
 }
 
 .tabs {
