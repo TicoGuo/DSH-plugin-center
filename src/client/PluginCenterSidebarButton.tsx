@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
+import { IconCordisPluginOutline14 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { SidebarFooterActionOwnerProps } from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import { PluginCenterView, type PluginCenterViewInjected } from './PluginCenterView.tsx'
@@ -41,7 +42,7 @@ export function PluginCenterSidebarButton({
         onClick={toggle}
         title={t('view.pluginCenter')}
       >
-        <span className={css.icon} aria-hidden="true">🧩</span>
+        <IconCordisPluginOutline14 size={wide ? 14 : 18} />
         {wide && <span className={css.label}>{t('view.pluginCenter')}</span>}
       </button>
       {open && (
