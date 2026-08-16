@@ -113,17 +113,23 @@
   background: var(--dsw-alias-interactive-bg-hover);
 }
 
-/* ── filter tabs (mirrors the 对话/轨迹 view-ring tab chrome) ─────────────── */
+/* ── sticky header + filter tabs (mirrors the 对话/轨迹 view-ring tab chrome) ── */
 
-.tabs {
+.stickyBar {
   position: sticky;
   top: 0;
   z-index: 2;
   display: flex;
-  gap: 36px;
-  padding-top: 4px;
-  padding-left: 8px;
+  flex-direction: column;
+  gap: 4px;
+  padding-bottom: 8px;
   background: var(--dsw-alias-bg-layer-1);
+}
+
+.tabs {
+  display: flex;
+  gap: 36px;
+  padding-left: 8px;
 }
 
 .tab {

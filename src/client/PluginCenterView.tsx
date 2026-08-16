@@ -169,6 +169,7 @@ export function PluginCenterView({
 
   return (
     <div className={css.root} data-plugin-center="">
+      <div className={css.stickyBar}>
       <header className={css.header}>
         <div className={css.titleRow}>
           <h2 className={css.title}>{t('view.pluginCenter')}</h2>
@@ -206,6 +207,7 @@ export function PluginCenterView({
             {t(FILTER_LABEL_KEY[option])}
           </button>
         ))}
+      </div>
       </div>
 
       {loadError !== null ? <p className={css.banner} role="alert">{t('githubError', { message: loadError })}</p> : null}
