@@ -23,6 +23,7 @@ export const PLUGIN_CENTER_STATE_FILENAME = 'plugin-center.json'
 
 /** The sidecar document shape. */
 interface PluginCenterStateFile {
+  readonly enabled?: boolean
   readonly disabled: readonly string[]
   readonly packages: Readonly<Record<string, string>>
 }
@@ -42,6 +43,8 @@ export interface ProfilePluginState {
 /** Read profile manifest plus the parsed plugin-center sidecar. */
 export interface LoadedProfileState {
   readonly manifest: ProfileManifest
+  /** Whether the Plugin Center feature is enabled (sidecar-owned). */
+  readonly enabled: boolean
   readonly plugins: ProfilePluginState
 }
 
@@ -69,19 +72,20 @@ export function ensureProfileDir(profileDir: string, profileName: string): strin
  */
 function readSidecar(profileDir: string): PluginCenterStateFile {
   const path = join(profileDir, PLUGIN_CENTER_STATE_FILENAME)
-  if (!existsSync(path)) return { disabled: [], packages: {} }
+  if (!existsSync(path)) return { enabled: false, disabled: [], packages: {} }
   try {
     const parsed = JSON.parse(readFileSync(path, 'utf8')) as Partial<PluginCenterStateFile> | null
-    if (parsed === null || typeof parsed !== 'object') return { disabled: [], packages: {} }
+    if (parsed === null || typeof parsed !== 'object') return { enabled: false, disabled: [], packages: {} }
+    const enabled = parsed.enabled === true
     const disabled = Array.isArray(parsed.disabled) && parsed.disabled.every(name => typeof name === 'string')
       ? parsed.disabled
       : []
     const packages = parsed.packages !== null && typeof parsed.packages === 'object' && !Array.isArray(parsed.packages)
       ? parsed.packages
       : {}
-    return { disabled, packages }
+    return { enabled, disabled, packages }
   } catch {
-    return { disabled: [], packages: {} }
+    return { enabled: false, disabled: [], packages: {} }
   }
 }
 
@@ -99,6 +103,7 @@ export function readProfileState(profileDir: string): LoadedProfileState {
   }
   return {
     manifest,
+    enabled: sidecar.enabled,
     plugins: {
       enabledBundles: manifest.dsh?.profile?.bundles ?? [],
       disabledNames: new Set(sidecar.disabled),
@@ -109,21 +114,24 @@ export function readProfileState(profileDir: string): LoadedProfileState {
 }
 
 /**
- * Persist the manifest's bundle list and the sidecar (disabled list + id→name
- * mapping) together so a mutation cannot leave them disagreeing.
+ * Persist the manifest's bundle list and the sidecar (enabled flag + disabled
+ * list + id→name mapping) together so a mutation cannot leave them disagreeing.
  * @param profileDir - the absolute profile directory.
  * @param manifest - the manifest to write (its `dsh.profile.bundles` must already reflect the change).
+ * @param enabled - whether the Plugin Center feature is enabled.
  * @param disabledNames - the full disabled-name set to persist.
  * @param packages - the full catalog-id → package-name mapping to persist.
  */
 export function writeProfileState(
   profileDir: string,
   manifest: ProfileManifest,
+  enabled: boolean,
   disabledNames: ReadonlySet<string>,
   packages: ReadonlyMap<string, string>,
 ): void {
   writeProfileManifest(profileDir, manifest)
   const sidecar: PluginCenterStateFile = {
+    enabled,
     disabled: [...disabledNames].sort(),
     packages: Object.fromEntries([...packages.entries()].sort(([left], [right]) => left.localeCompare(right))),
   }

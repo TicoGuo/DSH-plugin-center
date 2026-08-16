@@ -20,10 +20,8 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
-import z from '@deepseek-ai/schemastery'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import { resolveProfileDir } from '@deepseek-ai/dsh-app-boot'
-import { installSettingsSection, settingsNamespace } from '@deepseek-ai/dsh-settings'
 import { AWESOME_CATALOG_URL } from './awesome.ts'
 import { loadRegistry } from './registry.ts'
 import { mergeCatalog } from './merge.ts'
@@ -50,21 +48,9 @@ export const inject = ['webServer']
 export interface Config {
   /** The profile whose directory is the install target (default `web`). */
   profile?: string
-  /** Whether the Plugin Center is enabled (default false); toggled by the settings card. */
-  enabled?: boolean
   /** Curated catalog README URL (default the awesome-dsh-plugin list). */
   catalogUrl?: string
 }
-
-/** Schemastery schema resolving this plugin's configuration (fields optional, like the balance-check plugin). */
-export const Config: z<Config> = z.object({
-  profile: z.string(),
-  enabled: z.boolean(),
-  catalogUrl: z.string(),
-})
-
-/** Settings namespace carrying this plugin's user-facing fields. */
-export const PLUGIN_CENTER_SETTINGS_NAMESPACE = settingsNamespace('plugin-center')
 
 /** Resolved install input: the pnpm spec plus whether a SHA256 check ran. */
 interface ResolvedInstallSpec {
@@ -76,10 +62,6 @@ interface ResolvedInstallSpec {
 /** Effective profile name with the default applied. */
 function effectiveProfile(config: Config): string {
   return config.profile !== undefined && config.profile.length > 0 ? config.profile : 'web'
-}
-
-function effectiveEnabled(config: Config): boolean {
-  return config.enabled ?? false
 }
 
 function effectiveCatalogUrl(config: Config): string {
@@ -117,20 +99,13 @@ function withoutPackage(packages: ReadonlyMap<string, string>, id: string): Read
 }
 
 /**
- * Register the settings namespace and mount the `/plugin-center` route tree.
- * @param ctx - plugin context carrying the web server (and, when composed, the settings service).
- * @param config - resolved plugin configuration.
+ * Mount the `/plugin-center` route tree. The on/off toggle is persisted in the
+ * profile sidecar (not a settings namespace), so no harness change is required.
+ * @param ctx - plugin context carrying the web server.
+ * @param config - deployment policy (profile + catalog URL).
  */
 export function apply(ctx: Context, config: Config = {}): void {
-  // The settings scope feeds the web plugin-configuration card; when no settings
-  // service is mounted the plugin keeps working from the composition entry alone.
-  let current: () => Config = () => config
-  installSettingsSection(ctx, PLUGIN_CENTER_SETTINGS_NAMESPACE, Config, config, {
-    setSource: (source) => {
-      current = source
-    },
-    onChange: () => {},
-  })
+  const current = (): Config => config
 
   const packageManager: PackageManager = createPnpmPackageManager()
   let registryCache: readonly PluginRegistryEntry[] | null = null
@@ -221,6 +196,7 @@ export function apply(ctx: Context, config: Config = {}): void {
       writeProfileState(
         profileDir,
         withBundleEnabled(after.manifest, packageName),
+        after.enabled,
         withoutDisabled(after.plugins.disabledNames, packageName),
         withPackage(after.plugins.packages, entry.id, packageName),
       )
@@ -287,6 +263,7 @@ export function apply(ctx: Context, config: Config = {}): void {
       writeProfileState(
         profileDir,
         withBundleDisabled(after.manifest, packageName),
+        after.enabled,
         withoutDisabled(after.plugins.disabledNames, packageName),
         withoutPackage(after.plugins.packages, entry.id),
       )
@@ -315,7 +292,7 @@ export function apply(ctx: Context, config: Config = {}): void {
       const disabled = enabled
         ? withoutDisabled(loaded.plugins.disabledNames, packageName)
         : withDisabled(loaded.plugins.disabledNames, packageName)
-      writeProfileState(profileDir, manifest, disabled, loaded.plugins.packages)
+      writeProfileState(profileDir, manifest, loaded.enabled, disabled, loaded.plugins.packages)
       const message = `${action} ${packageName}`
       appendOperationLog(profileDir, action, packageName, entry.version, true, message)
       return success(action, packageName, entry.version, false, message)
@@ -336,13 +313,29 @@ export function apply(ctx: Context, config: Config = {}): void {
   }, 'plugin-center: /plugin-center routes')
 
   async function dispatch(req: IncomingMessage, res: ServerResponse): Promise<void> {
-    if (!effectiveEnabled(current())) {
-      sendJson(res, 403, { ok: false, code: 'disabled', message: 'Plugin Center is disabled' })
-      return
-    }
+    const profileName = effectiveProfile(current())
+    const profileDir = ensureProfileDir(resolveProfileDir(profileName), profileName)
     const pathname = (req.url ?? '/').split('?', 1)[0] ?? '/'
     const sub = pathname === '/plugin-center' ? '' : pathname.slice('/plugin-center'.length)
     try {
+      // Feature on/off (sidecar-owned). These two routes stay reachable even
+      // while disabled, so the settings card can read + flip the toggle.
+      if (sub === '/status' && (req.method === 'GET' || req.method === 'HEAD')) {
+        sendJson(res, 200, { ok: true, enabled: readProfileState(profileDir).enabled })
+        return
+      }
+      if (sub === '/set-enabled' && req.method === 'POST') {
+        const body = await readJsonBody(req) as Record<string, unknown>
+        const enabled = body.enabled === true
+        const loaded = readProfileState(profileDir)
+        writeProfileState(profileDir, loaded.manifest, enabled, loaded.plugins.disabledNames, loaded.plugins.packages)
+        sendJson(res, 200, { ok: true, enabled })
+        return
+      }
+      if (!readProfileState(profileDir).enabled) {
+        sendJson(res, 403, { ok: false, code: 'disabled', message: 'Plugin Center is disabled' })
+        return
+      }
       if (sub === '/list' && (req.method === 'GET' || req.method === 'HEAD')) {
         await loadCatalog(effectiveCatalogUrl(current()))
         sendJson(res, 200, { ok: true, ...buildSnapshot(registryCache ?? []), error: registryError })
@@ -357,8 +350,6 @@ export function apply(ctx: Context, config: Config = {}): void {
         return
       }
       if (sub === '/logs' && (req.method === 'GET' || req.method === 'HEAD')) {
-        const profileName = effectiveProfile(current())
-        const profileDir = ensureProfileDir(resolveProfileDir(profileName), profileName)
         sendJson(res, 200, { ok: true, entries: readOperationLog(profileDir) })
         return
       }
