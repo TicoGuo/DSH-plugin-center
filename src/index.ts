@@ -195,10 +195,8 @@ export function apply(ctx: Context, config: Config = {}): void {
   const resolvedName = (loaded: ReturnType<typeof readProfileState>, entry: PluginRegistryEntry): string =>
     loaded.plugins.packages.get(entry.id) ?? entry.packageName
 
-  const installOrUpdate = async (
-    action: 'install' | 'update',
-    id: string,
-  ): Promise<PluginOperationResult> => {
+  const installOne = async (id: string): Promise<PluginOperationResult> => {
+    const action: PluginOperation = 'install'
     const entry = await findEntry(id)
     if (entry === null) return failure(action, null, null, 'unknown-plugin', `unknown plugin id "${id}"`)
     const profileName = effectiveProfile(current())
@@ -224,7 +222,7 @@ export function apply(ctx: Context, config: Config = {}): void {
         withoutDisabled(after.plugins.disabledNames, packageName),
         withPackage(after.plugins.packages, entry.id, packageName),
       )
-      const message = `${action}ed ${packageName}`
+      const message = `installed ${packageName}`
       appendOperationLog(profileDir, action, packageName, entry.version, true, message)
       return success(action, packageName, entry.version, resolved.sha256Verified, message)
     } catch (error) {
@@ -233,6 +231,37 @@ export function apply(ctx: Context, config: Config = {}): void {
       return failure(action, entry.packageName, entry.version, 'failed', message)
     } finally {
       if (tempPath !== null) void unlink(tempPath).catch(() => {})
+    }
+  }
+
+  const updateOne = async (id: string): Promise<PluginOperationResult> => {
+    const action: PluginOperation = 'update'
+    const entry = await findEntry(id)
+    if (entry === null) return failure(action, null, null, 'unknown-plugin', `unknown plugin id "${id}"`)
+    const profileName = effectiveProfile(current())
+    const profileDir = ensureProfileDir(resolveProfileDir(profileName), profileName)
+    try {
+      const loaded = readProfileState(profileDir)
+      const packageName = resolvedName(loaded, entry)
+      const beforeVersion = readInstalledVersion(profileDir, packageName)
+      const pmResult = await packageManager.update(profileDir, packageName)
+      if (!pmResult.ok) {
+        appendOperationLog(profileDir, action, packageName, entry.version, false, pmResult.output)
+        return failure(action, packageName, entry.version, 'update-failed', pmResult.output)
+      }
+      const afterVersion = readInstalledVersion(profileDir, packageName)
+      if (beforeVersion !== null && afterVersion !== null && beforeVersion === afterVersion) {
+        const message = `up to date: ${packageName}`
+        appendOperationLog(profileDir, action, packageName, afterVersion, true, message)
+        return { ok: true, action, packageName, version: afterVersion, sha256Verified: false, code: 'up-to-date', message }
+      }
+      const message = `updated ${packageName}`
+      appendOperationLog(profileDir, action, packageName, afterVersion, true, message)
+      return success(action, packageName, afterVersion, false, message)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      appendOperationLog(profileDir, action, entry.packageName, entry.version, false, message)
+      return failure(action, entry.packageName, entry.version, 'failed', message)
     }
   }
 
@@ -339,8 +368,8 @@ export function apply(ctx: Context, config: Config = {}): void {
           sendJson(res, 400, { ok: false, code: 'bad-request', message: 'missing plugin id' })
           return
         }
-        if (sub === '/install') sendJson(res, 200, await installOrUpdate('install', id))
-        else if (sub === '/update') sendJson(res, 200, await installOrUpdate('update', id))
+        if (sub === '/install') sendJson(res, 200, await installOne(id))
+        else if (sub === '/update') sendJson(res, 200, await updateOne(id))
         else if (sub === '/uninstall') sendJson(res, 200, await uninstallOne(id))
         else if (sub === '/enable') sendJson(res, 200, await setEnabled(id, true))
         else sendJson(res, 200, await setEnabled(id, false))

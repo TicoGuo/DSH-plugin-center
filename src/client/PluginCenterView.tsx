@@ -129,7 +129,9 @@ export function PluginCenterView({
         setToast({
           seq: ++toastSeq.current,
           text: result.ok
-            ? t(SUCCESS_TOAST_KEY[action])
+            ? result.code === 'up-to-date'
+              ? t('toast.upToDate')
+              : `${t(SUCCESS_TOAST_KEY[action])}${t('toast.restartHint')}`
             : t('toast.failed', { message: result.message }),
         })
       },
@@ -234,7 +236,15 @@ export function PluginCenterView({
                   aria-expanded={open}
                   onClick={() => { setExpandedId(current => current === entry.id ? null : entry.id) }}
                 >
-                  <span className={css.icon} aria-hidden="true">{entry.icon}</span>
+                  <span className={css.icon} aria-hidden="true">
+                    <img
+                      src={entry.icon}
+                      alt=""
+                      loading="lazy"
+                      referrerPolicy="no-referrer"
+                      onError={(event) => { event.currentTarget.style.visibility = 'hidden' }}
+                    />
+                  </span>
                   <span className={css.cardMain}>
                     <span className={css.nameRow}>
                       <strong className={css.cardTitle}>{entry.name}</strong>

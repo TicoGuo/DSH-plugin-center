@@ -55,7 +55,7 @@ export function parseAwesomeHtml(html: string): readonly PluginRegistryEntry[] {
       name: fullRepo,
       packageName: spec,
       description,
-      icon: '🧩',
+      icon: `https://github.com/${owner}.png`,
       author: owner,
       repository: `https://github.com/${owner}/${repo}`,
       stars: Number.isFinite(stars) ? stars : 0,

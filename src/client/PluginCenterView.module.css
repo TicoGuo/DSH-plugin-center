@@ -257,10 +257,16 @@
   justify-content: center;
   width: 38px;
   height: 38px;
+  overflow: hidden;
   border-radius: 10px;
-  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 10%, transparent);
-  font-size: 20px;
-  line-height: 1;
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.icon img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .cardMain {

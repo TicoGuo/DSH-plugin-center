@@ -43,6 +43,8 @@ export type PluginCenterKey =
   | 'toast.enable'
   | 'toast.disable'
   | 'toast.failed'
+  | 'toast.upToDate'
+  | 'toast.restartHint'
   | 'loading'
   | 'error'
   | 'retry'
@@ -101,6 +103,8 @@ export const zh: Record<PluginCenterKey, string> = {
   'toast.enable': '已启用',
   'toast.disable': '已停用',
   'toast.failed': '操作失败：{message}',
+  'toast.upToDate': '已是最新版本',
+  'toast.restartHint': '（需重启 dsh web 生效）',
   'loading': '正在加载插件…',
   'error': '加载插件列表失败',
   'retry': '重试',
@@ -153,6 +157,8 @@ export const en: Record<PluginCenterKey, string> = {
   'toast.enable': 'Enabled',
   'toast.disable': 'Disabled',
   'toast.failed': 'Failed: {message}',
+  'toast.upToDate': 'Already up to date',
+  'toast.restartHint': ' (restart dsh web to apply)',
   'loading': 'Loading plugins…',
   'error': 'Failed to load plugins',
   'retry': 'Retry',
