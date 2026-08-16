@@ -1,6 +1,6 @@
 /** Pure Plugin Center projections: the toolbar filter, unit-tested without React. */
 
-import type { PluginCenterEntry } from '@deepseek-ai/dsh-plugin-center/types'
+import type { PluginCenterEntry } from '@ticoguo/dsh-plugin-center/types'
 
 /** Toolbar filter selection. */
 export type PluginCenterFilter = 'all' | 'installed' | 'updatable' | 'disabled'

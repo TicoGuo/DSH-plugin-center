@@ -1,24 +1,23 @@
 /**
- * Plugin registry loading: fetch a JSON catalog from a configurable URL,
- * validate each entry at the network boundary, and order the result by GitHub
- * popularity. A bundled default catalog keeps the Plugin Center usable before
- * a deployment publishes its own registry.
+ * Plugin catalog loading. The default source is the curated awesome-dsh-plugin
+ * list (parsed from its README); the older curated-JSON helpers are retained
+ * for deployments that publish a manifest document with per-plugin `download` +
+ * `sha256` integrity metadata.
  */
 
-import { githubCatalog } from './github.ts'
+import { awesomeCatalog } from './awesome.ts'
 import type { PluginRegistryEntry } from './types.ts'
 
-/** String fields every registry entry must carry. */
+/** String fields every curated-JSON registry entry must carry. */
 const REQUIRED_STRINGS = [
   'id', 'name', 'packageName', 'description', 'icon', 'author', 'repository',
   'version', 'changelog', 'spec',
 ] as const
 
 /**
- * Validate and project one catalog row. Unknown fields are dropped, required
- * fields are checked for type, and numeric/optional fields are coerced with
- * their defaults so a malformed remote row fails loud rather than leaking a
- * half-typed entry into the merged catalog.
+ * Validate and project one curated-JSON catalog row. Unknown fields are
+ * dropped and required fields are type-checked so a malformed remote row fails
+ * loud rather than leaking a half-typed entry into the merged catalog.
  * @param value - one JSON value from the registry `plugins` array.
  * @param index - position in the array, for the error message.
  * @returns the validated, frozen registry entry.
@@ -70,7 +69,7 @@ export function parseRegistryEntry(value: unknown, index: number): PluginRegistr
 }
 
 /**
- * Parse a registry document into validated entries.
+ * Parse a curated-JSON registry document into validated entries.
  * @param json - parsed JSON value from the registry URL.
  * @returns frozen entries in document order.
  */
@@ -86,8 +85,7 @@ export function parseRegistry(json: unknown): readonly PluginRegistryEntry[] {
 }
 
 /**
- * Order entries by popularity: GitHub stars descending, ties broken by id so
- * the sort is deterministic across fetches.
+ * Order curated-JSON entries by popularity: stars descending, ties broken by id.
  * @param entries - validated entries in any order.
  * @returns a new array ordered by popularity.
  */
@@ -97,19 +95,18 @@ export function sortRegistry(entries: readonly PluginRegistryEntry[]): readonly 
 }
 
 /**
- * Load the catalog live from GitHub and order it by popularity. A search
- * failure returns an explicit error string (never a hardcoded fallback list);
- * an empty result is a genuine "no public DSH plugins found" state.
- * @param githubQuery - GitHub search query.
+ * Load the catalog from the curated awesome-dsh-plugin list. A fetch failure
+ * returns an explicit error string (never a hardcoded fallback list).
+ * @param catalogUrl - the catalog README URL.
  * @param fetchFn - injectable fetch (Node's global fetch in production).
- * @returns entries ordered by popularity plus an optional load error.
+ * @returns entries in curated order plus an optional load error.
  */
 export async function loadRegistry(
-  githubQuery: string,
+  catalogUrl: string,
   fetchFn: typeof fetch = fetch,
 ): Promise<{ entries: readonly PluginRegistryEntry[]; error: string | null }> {
   try {
-    return { entries: sortRegistry(await githubCatalog(githubQuery, fetchFn)), error: null }
+    return { entries: await awesomeCatalog(catalogUrl, fetchFn), error: null }
   } catch (error) {
     return {
       entries: Object.freeze([]),

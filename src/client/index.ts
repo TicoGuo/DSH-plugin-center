@@ -1,12 +1,12 @@
 /**
- * Browser Plugin Center plugin: the conversation view tab plus the settings
- * enable card. It is a pure consumer of the host `/plugin-center` HTTP routes
- * and the `plugin-center` settings namespace.
+ * Browser Plugin Center plugin: the conversation view tab (shown only while the
+ * plugin is enabled) plus the settings enable card. It is a pure consumer of the
+ * host `/plugin-center` HTTP routes and the `plugin-center` settings namespace.
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import type { PluginOperationResult } from '@deepseek-ai/dsh-plugin-center/types'
-import type { SessionId } from '@deepseek-ai/dsh-client-runtime/client'
+import type { PluginOperationResult } from '@ticoguo/dsh-plugin-center/types'
+import type { SessionId, SettingsScope } from '@deepseek-ai/dsh-client-runtime/client'
 // Type-only: pulls the locale plugin's Context merge (ctx.locale).
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 // Type-only: the 'conversation.view' SlotMap row must be in the program for register to type.
@@ -17,7 +17,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
 import { PluginCenterView, type PluginCenterListResult, type PluginCenterViewInjected } from './PluginCenterView.tsx'
 import { PluginCenterCard } from './PluginCenterCard.tsx'
-import { PluginCenterCardController } from './plugin-center-card.ts'
+import { PluginCenterCardController, type PluginCenterSettings } from './plugin-center-card.ts'
 import { en, NS, zh } from './locales.ts'
 
 export type { PluginCenterViewInjected } from './PluginCenterView.tsx'
@@ -39,14 +39,15 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 /**
- * Client plugin body: register the Plugin Center view tab and the settings
- * enable card. Both registrations ride the slot service's effect wrapper, so
- * plugin unload removes them.
+ * Client plugin body: register the settings enable card and, while enabled,
+ * the conversation view tab. Both registrations ride the slot service's effect
+ * wrapper, so plugin unload removes them.
  * @param ctx - client root context.
  */
 export function apply(ctx: Context): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-plugin-center: dictionaries')
   const t = ctx.locale.bind(NS)
+  const scope = ctx.settingsScope.bind({ namespace: NS }) as SettingsScope<PluginCenterSettings>
 
   const list = (): Promise<PluginCenterListResult> => request<PluginCenterListResult>('/list')
   const refresh = (): Promise<PluginCenterListResult> =>
@@ -63,18 +64,31 @@ export function apply(ctx: Context): void {
       body: JSON.stringify({ id }),
     })
 
-  ctx.slots.inject('conversation.view', () => ctx.slots.register({
-    name: 'conversation.view',
-    id: 'plugin-center',
-    order: 20,
-    locale: NS,
-    label: () => t('view.pluginCenter'),
-    inject: (_sessionId: SessionId): PluginCenterViewInjected => ({
-      list, refresh, install, uninstall, update, setEnabled,
-    }),
-  }, PluginCenterView))
+  // The tab is mounted only while the feature is enabled, so the default-off
+  // state never shows "插件中心" in the Chat/Trajectory ring.
+  let disposeTab: (() => void) | null = null
+  const syncTab = (): void => {
+    const enabled = scope.getSnapshot().value?.enabled ?? false
+    if (enabled && disposeTab === null) {
+      disposeTab = ctx.slots.inject('conversation.view', () => ctx.slots.register({
+        name: 'conversation.view',
+        id: 'plugin-center',
+        order: 20,
+        locale: NS,
+        label: () => t('view.pluginCenter'),
+        inject: (_sessionId: SessionId): PluginCenterViewInjected => ({
+          list, refresh, install, uninstall, update, setEnabled,
+        }),
+      }, PluginCenterView))
+    } else if (!enabled && disposeTab !== null) {
+      disposeTab()
+      disposeTab = null
+    }
+  }
+  syncTab()
+  scope.subscribe(syncTab)
 
-  const card = new PluginCenterCardController(ctx.settingsScope.bind({ namespace: NS }))
+  const card = new PluginCenterCardController(scope)
   ctx.slots.inject('settings.plugin.item', () => ctx.slots.register({
     name: 'settings.plugin.item',
     id: 'plugin-center',

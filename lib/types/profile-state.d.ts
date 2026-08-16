@@ -2,8 +2,9 @@
  * Durable profile state for the Plugin Center: the profile manifest's
  * `dsh.profile.bundles` layer list (which bundles are enabled) plus a small
  * `plugin-center.json` sidecar holding the names of intentionally-disabled
- * bundles. Keeping the disabled list separate from `dependencies` lets an
- * installed plugin stay installed while its patch layer is switched off.
+ * bundles and the catalog-id → installed-package-name mapping (a git spec
+ * `github:owner/repo` resolves to a package whose npm name differs from the
+ * repo slug, so the resolved name is remembered here).
  */
 import { type ProfileManifest } from '@deepseek-ai/dsh-app-boot';
 /** Sidecar filename inside the profile directory. */
@@ -16,6 +17,8 @@ export interface ProfilePluginState {
     readonly disabledNames: ReadonlySet<string>;
     /** Package names present in the profile `dependencies`. */
     readonly installedNames: ReadonlySet<string>;
+    /** Catalog id (`owner/repo`) → resolved npm package name. */
+    readonly packages: ReadonlyMap<string, string>;
 }
 /** Read profile manifest plus the parsed plugin-center sidecar. */
 export interface LoadedProfileState {
@@ -38,14 +41,14 @@ export declare function ensureProfileDir(profileDir: string, profileName: string
  */
 export declare function readProfileState(profileDir: string): LoadedProfileState;
 /**
- * Persist the manifest's bundle list and the sidecar's disabled list. The two
- * files are written together so an enable/disable toggle cannot leave them
- * disagreeing about which bundles are composed.
+ * Persist the manifest's bundle list and the sidecar (disabled list + id→name
+ * mapping) together so a mutation cannot leave them disagreeing.
  * @param profileDir - the absolute profile directory.
  * @param manifest - the manifest to write (its `dsh.profile.bundles` must already reflect the change).
  * @param disabledNames - the full disabled-name set to persist.
+ * @param packages - the full catalog-id → package-name mapping to persist.
  */
-export declare function writeProfileState(profileDir: string, manifest: ProfileManifest, disabledNames: ReadonlySet<string>): void;
+export declare function writeProfileState(profileDir: string, manifest: ProfileManifest, disabledNames: ReadonlySet<string>, packages: ReadonlyMap<string, string>): void;
 /**
  * Copy a manifest with one bundle appended to the layer list (deduplicated).
  * @param manifest - the current manifest.
@@ -53,6 +56,13 @@ export declare function writeProfileState(profileDir: string, manifest: ProfileM
  * @returns a new manifest with the bundle enabled.
  */
 export declare function withBundleEnabled(manifest: ProfileManifest, packageName: string): ProfileManifest;
+/**
+ * Copy a manifest with one bundle removed from the layer list.
+ * @param manifest - the current manifest.
+ * @param packageName - the bundle name to disable or remove.
+ * @returns a new manifest without the bundle in the layer list.
+ */
+export declare function withBundleDisabled(manifest: ProfileManifest, packageName: string): ProfileManifest;
 /**
  * Read one installed package's resolved version from the profile's hoisted
  * `node_modules` (pnpm's `nodeLinker: hoisted` layout). Scoped names nest under
@@ -63,11 +73,4 @@ export declare function withBundleEnabled(manifest: ProfileManifest, packageName
  * @returns the resolved version, or null when it cannot be read.
  */
 export declare function readInstalledVersion(profileDir: string, packageName: string): string | null;
-/**
- * Copy a manifest with one bundle removed from the layer list.
- * @param manifest - the current manifest.
- * @param packageName - the bundle name to disable or remove.
- * @returns a new manifest without the bundle in the layer list.
- */
-export declare function withBundleDisabled(manifest: ProfileManifest, packageName: string): ProfileManifest;
 //# sourceMappingURL=profile-state.d.ts.map

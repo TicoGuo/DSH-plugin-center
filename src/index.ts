@@ -5,13 +5,14 @@
  * harness's Typert Remote assembly (which is compiled in). Instead it registers
  * a `/plugin-center` prefix route on the web server — the same transport the
  * balance-check plugin uses — and a `plugin-center` settings namespace whose
- * `enabled` boolean is the on/off toggle rendered by the browser card.
+ * `enabled` boolean (default off) is the on/off toggle rendered by the browser
+ * card.
  *
- * The catalog is read live from GitHub (ranked by stars) with a curated
- * registry URL override; install/uninstall/update forward to pnpm inside the
- * managed profile; tarball downloads are SHA256-verified when the registry
- * publishes a digest; and every mutation is appended to a JSONL operation log.
- * @module @deepseek-ai/dsh-plugin-center
+ * The catalog is the curated awesome-dsh-plugin list; install/uninstall/update
+ * forward to pnpm inside the managed profile (git specs resolve to a package
+ * name discovered by dependency diff and remembered in the sidecar), and every
+ * mutation is appended to a JSONL operation log.
+ * @module @ticoguo/dsh-plugin-center
  */
 
 import { unlink, writeFile } from 'node:fs/promises'
@@ -23,7 +24,7 @@ import z from '@deepseek-ai/schemastery'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import { resolveProfileDir } from '@deepseek-ai/dsh-app-boot'
 import { installSettingsSection, settingsNamespace } from '@deepseek-ai/dsh-settings'
-import { DEFAULT_GITHUB_QUERY } from './github.ts'
+import { AWESOME_CATALOG_URL } from './awesome.ts'
 import { loadRegistry } from './registry.ts'
 import { mergeCatalog } from './merge.ts'
 import {
@@ -49,17 +50,17 @@ export const inject = ['webServer']
 export interface Config {
   /** The profile whose directory is the install target (default `web`). */
   profile?: string
-  /** Whether the Plugin Center is enabled (default true); toggled by the settings card. */
+  /** Whether the Plugin Center is enabled (default false); toggled by the settings card. */
   enabled?: boolean
-  /** GitHub search query used when no curated registry is configured. */
-  githubQuery?: string
+  /** Curated catalog README URL (default the awesome-dsh-plugin list). */
+  catalogUrl?: string
 }
 
 /** Schemastery schema resolving this plugin's configuration (fields optional, like the balance-check plugin). */
 export const Config: z<Config> = z.object({
   profile: z.string(),
   enabled: z.boolean(),
-  githubQuery: z.string(),
+  catalogUrl: z.string(),
 })
 
 /** Settings namespace carrying this plugin's user-facing fields. */
@@ -78,13 +79,13 @@ function effectiveProfile(config: Config): string {
 }
 
 function effectiveEnabled(config: Config): boolean {
-  return config.enabled ?? true
+  return config.enabled ?? false
 }
 
-function effectiveQuery(config: Config): string {
-  return config.githubQuery !== undefined && config.githubQuery.length > 0
-    ? config.githubQuery
-    : DEFAULT_GITHUB_QUERY
+function effectiveCatalogUrl(config: Config): string {
+  return config.catalogUrl !== undefined && config.catalogUrl.length > 0
+    ? config.catalogUrl
+    : AWESOME_CATALOG_URL
 }
 
 /** Copy a disabled-name set with one name added. */
@@ -98,6 +99,20 @@ function withDisabled(disabled: ReadonlySet<string>, name: string): ReadonlySet<
 function withoutDisabled(disabled: ReadonlySet<string>, name: string): ReadonlySet<string> {
   const next = new Set(disabled)
   next.delete(name)
+  return next
+}
+
+/** Copy the id→name mapping with one entry added. */
+function withPackage(packages: ReadonlyMap<string, string>, id: string, name: string): ReadonlyMap<string, string> {
+  const next = new Map(packages)
+  next.set(id, name)
+  return next
+}
+
+/** Copy the id→name mapping with one entry removed. */
+function withoutPackage(packages: ReadonlyMap<string, string>, id: string): ReadonlyMap<string, string> {
+  const next = new Map(packages)
+  next.delete(id)
   return next
 }
 
@@ -122,8 +137,8 @@ export function apply(ctx: Context, config: Config = {}): void {
   let registryError: string | null = null
   let registryLoad: Promise<void> | null = null
 
-  const loadCatalog = (query: string): Promise<void> => {
-    registryLoad ??= loadRegistry(query).then((result) => {
+  const loadCatalog = (catalogUrl: string): Promise<void> => {
+    registryLoad ??= loadRegistry(catalogUrl).then((result) => {
       registryCache = result.entries
       registryError = result.error
     })
@@ -131,7 +146,7 @@ export function apply(ctx: Context, config: Config = {}): void {
   }
 
   const findEntry = async (id: string): Promise<PluginRegistryEntry | null> => {
-    await loadCatalog(effectiveQuery(current()))
+    await loadCatalog(effectiveCatalogUrl(current()))
     return registryCache?.find(entry => entry.id === id) ?? null
   }
 
@@ -140,7 +155,7 @@ export function apply(ctx: Context, config: Config = {}): void {
     const profileDir = ensureProfileDir(resolveProfileDir(profileName), profileName)
     const loaded = readProfileState(profileDir)
     const versions = new Map<string, string>()
-    for (const packageName of loaded.plugins.installedNames) {
+    for (const packageName of loaded.plugins.packages.values()) {
       const version = readInstalledVersion(profileDir, packageName)
       if (version !== null) versions.set(packageName, version)
     }
@@ -176,6 +191,10 @@ export function apply(ctx: Context, config: Config = {}): void {
     { ok: false, action, packageName, version, sha256Verified: false, code, message }
   )
 
+  /** Resolve the durable npm name for a catalog id, preferring the remembered mapping. */
+  const resolvedName = (loaded: ReturnType<typeof readProfileState>, entry: PluginRegistryEntry): string =>
+    loaded.plugins.packages.get(entry.id) ?? entry.packageName
+
   const installOrUpdate = async (
     action: 'install' | 'update',
     id: string,
@@ -188,20 +207,26 @@ export function apply(ctx: Context, config: Config = {}): void {
     try {
       const resolved = await resolveInstallSpec(entry)
       tempPath = resolved.tempPath
+      const before = readProfileState(profileDir)
       const pmResult = await packageManager.install(profileDir, resolved.spec)
       if (!pmResult.ok) {
         appendOperationLog(profileDir, action, entry.packageName, entry.version, false, pmResult.output)
         return failure(action, entry.packageName, entry.version, 'install-failed', pmResult.output)
       }
-      const loaded = readProfileState(profileDir)
+      const after = readProfileState(profileDir)
+      // pnpm records the dependency under the package's real name; the git spec
+      // is only the source. Diff against the pre-install set to find it.
+      const added = [...after.plugins.installedNames].filter(name => !before.plugins.installedNames.has(name))
+      const packageName = added[0] ?? resolvedName(after, entry)
       writeProfileState(
         profileDir,
-        withBundleEnabled(loaded.manifest, entry.packageName),
-        withoutDisabled(loaded.plugins.disabledNames, entry.packageName),
+        withBundleEnabled(after.manifest, packageName),
+        withoutDisabled(after.plugins.disabledNames, packageName),
+        withPackage(after.plugins.packages, entry.id, packageName),
       )
-      const message = `${action}ed ${entry.packageName}`
-      appendOperationLog(profileDir, action, entry.packageName, entry.version, true, message)
-      return success(action, entry.packageName, entry.version, resolved.sha256Verified, message)
+      const message = `${action}ed ${packageName}`
+      appendOperationLog(profileDir, action, packageName, entry.version, true, message)
+      return success(action, packageName, entry.version, resolved.sha256Verified, message)
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       appendOperationLog(profileDir, action, entry.packageName, entry.version, false, message)
@@ -218,20 +243,22 @@ export function apply(ctx: Context, config: Config = {}): void {
     const profileName = effectiveProfile(current())
     const profileDir = ensureProfileDir(resolveProfileDir(profileName), profileName)
     try {
-      const pmResult = await packageManager.uninstall(profileDir, entry.packageName)
-      if (!pmResult.ok) {
-        appendOperationLog(profileDir, action, entry.packageName, entry.version, false, pmResult.output)
-        return failure(action, entry.packageName, entry.version, 'uninstall-failed', pmResult.output)
-      }
       const loaded = readProfileState(profileDir)
+      const packageName = resolvedName(loaded, entry)
+      const pmResult = await packageManager.uninstall(profileDir, packageName)
+      if (!pmResult.ok) {
+        appendOperationLog(profileDir, action, packageName, entry.version, false, pmResult.output)
+        return failure(action, packageName, entry.version, 'uninstall-failed', pmResult.output)
+      }
       writeProfileState(
         profileDir,
-        withBundleDisabled(loaded.manifest, entry.packageName),
-        withoutDisabled(loaded.plugins.disabledNames, entry.packageName),
+        withBundleDisabled(loaded.manifest, packageName),
+        withoutDisabled(loaded.plugins.disabledNames, packageName),
+        withoutPackage(loaded.plugins.packages, entry.id),
       )
-      const message = `uninstalled ${entry.packageName}`
-      appendOperationLog(profileDir, action, entry.packageName, entry.version, true, message)
-      return success(action, entry.packageName, entry.version, false, message)
+      const message = `uninstalled ${packageName}`
+      appendOperationLog(profileDir, action, packageName, entry.version, true, message)
+      return success(action, packageName, entry.version, false, message)
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       appendOperationLog(profileDir, action, entry.packageName, entry.version, false, message)
@@ -247,16 +274,17 @@ export function apply(ctx: Context, config: Config = {}): void {
     const profileDir = ensureProfileDir(resolveProfileDir(profileName), profileName)
     try {
       const loaded = readProfileState(profileDir)
+      const packageName = resolvedName(loaded, entry)
       const manifest = enabled
-        ? withBundleEnabled(loaded.manifest, entry.packageName)
-        : withBundleDisabled(loaded.manifest, entry.packageName)
+        ? withBundleEnabled(loaded.manifest, packageName)
+        : withBundleDisabled(loaded.manifest, packageName)
       const disabled = enabled
-        ? withoutDisabled(loaded.plugins.disabledNames, entry.packageName)
-        : withDisabled(loaded.plugins.disabledNames, entry.packageName)
-      writeProfileState(profileDir, manifest, disabled)
-      const message = `${action} ${entry.packageName}`
-      appendOperationLog(profileDir, action, entry.packageName, entry.version, true, message)
-      return success(action, entry.packageName, entry.version, false, message)
+        ? withoutDisabled(loaded.plugins.disabledNames, packageName)
+        : withDisabled(loaded.plugins.disabledNames, packageName)
+      writeProfileState(profileDir, manifest, disabled, loaded.plugins.packages)
+      const message = `${action} ${packageName}`
+      appendOperationLog(profileDir, action, packageName, entry.version, true, message)
+      return success(action, packageName, entry.version, false, message)
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       appendOperationLog(profileDir, action, entry.packageName, entry.version, false, message)
@@ -282,7 +310,7 @@ export function apply(ctx: Context, config: Config = {}): void {
     const sub = pathname === '/plugin-center' ? '' : pathname.slice('/plugin-center'.length)
     try {
       if (sub === '/list' && (req.method === 'GET' || req.method === 'HEAD')) {
-        await loadCatalog(effectiveQuery(current()))
+        await loadCatalog(effectiveCatalogUrl(current()))
         sendJson(res, 200, { ok: true, ...buildSnapshot(registryCache ?? []), error: registryError })
         return
       }
@@ -290,7 +318,7 @@ export function apply(ctx: Context, config: Config = {}): void {
         registryCache = null
         registryError = null
         registryLoad = null
-        await loadCatalog(effectiveQuery(current()))
+        await loadCatalog(effectiveCatalogUrl(current()))
         sendJson(res, 200, { ok: true, ...buildSnapshot(registryCache ?? []), error: registryError })
         return
       }

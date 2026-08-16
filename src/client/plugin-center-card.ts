@@ -51,7 +51,7 @@ export class PluginCenterCardController {
     const snapshot = this.scope.getSnapshot()
     return {
       available: snapshot.status === 'ready',
-      enabled: snapshot.value?.enabled ?? true,
+      enabled: snapshot.value?.enabled ?? false,
       saving: this.saving,
     }
   }

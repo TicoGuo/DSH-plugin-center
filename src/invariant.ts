@@ -14,7 +14,7 @@ export const inject = ['invariants']
 /**
  * No runtime invariant: the Plugin Center owns no event stream or live Loader
  * relation to assert. Its durable state is the profile manifest, the
- * `plugin-center.json` sidecar, and the operation log â€?files written only by
+ * `plugin-center.json` sidecar, and the operation log â€” files written only by
  * this plugin, so there is no cross-owner relationship a runtime invariant
  * could catch.
  */

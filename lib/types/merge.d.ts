@@ -1,8 +1,8 @@
 /**
- * Pure merge of the registry catalog with the profile's installed state into
- * the snapshot a browser renders. No filesystem or network: the gateway
- * supplies installed-versions and plugin state, so the projection (and the
- * popularity/status decisions) is unit-testable.
+ * Pure merge of the catalog with the profile's installed state into the
+ * snapshot a browser renders. No filesystem or network: the gateway supplies
+ * plugin state and resolved installed versions, so the projection is
+ * unit-testable.
  */
 import type { ProfilePluginState } from './profile-state.ts';
 import type { PluginCenterSnapshot, PluginInstallState, PluginRegistryEntry } from './types.ts';
@@ -16,6 +16,14 @@ import type { PluginCenterSnapshot, PluginInstallState, PluginRegistryEntry } fr
  */
 export declare function compareSemver(left: string, right: string): number;
 /**
+ * Resolve the resolved npm package name for a catalog entry, if the Plugin
+ * Center installed it.
+ * @param entry - the catalog entry.
+ * @param plugins - the profile's plugin state.
+ * @returns the resolved package name, or undefined when not installed by this plugin.
+ */
+export declare function installedPackageName(entry: PluginRegistryEntry, plugins: ProfilePluginState): string | undefined;
+/**
  * Resolve one plugin's lifecycle state from installed facts.
  * @param entry - the registry entry.
  * @param plugins - the profile's plugin state.
@@ -24,11 +32,11 @@ export declare function compareSemver(left: string, right: string): number;
  */
 export declare function entryState(entry: PluginRegistryEntry, plugins: ProfilePluginState, installedVersion: string | null): PluginInstallState;
 /**
- * Merge registry entries with the profile state into the rendered snapshot,
- * keeping the registry's popularity order.
- * @param registry - registry entries ordered by popularity.
+ * Merge catalog entries with the profile state into the rendered snapshot,
+ * keeping the catalog's order.
+ * @param registry - catalog entries in curated order.
  * @param plugins - the profile's plugin state.
- * @param installedVersions - resolved installed version per package name.
+ * @param installedVersions - resolved installed version per npm package name.
  * @returns the merged snapshot with aggregate counts.
  */
 export declare function mergeCatalog(registry: readonly PluginRegistryEntry[], plugins: ProfilePluginState, installedVersions: ReadonlyMap<string, string>): PluginCenterSnapshot;

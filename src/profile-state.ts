@@ -2,8 +2,9 @@
  * Durable profile state for the Plugin Center: the profile manifest's
  * `dsh.profile.bundles` layer list (which bundles are enabled) plus a small
  * `plugin-center.json` sidecar holding the names of intentionally-disabled
- * bundles. Keeping the disabled list separate from `dependencies` lets an
- * installed plugin stay installed while its patch layer is switched off.
+ * bundles and the catalog-id → installed-package-name mapping (a git spec
+ * `github:owner/repo` resolves to a package whose npm name differs from the
+ * repo slug, so the resolved name is remembered here).
  */
 
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
@@ -23,6 +24,7 @@ export const PLUGIN_CENTER_STATE_FILENAME = 'plugin-center.json'
 /** The sidecar document shape. */
 interface PluginCenterStateFile {
   readonly disabled: readonly string[]
+  readonly packages: Readonly<Record<string, string>>
 }
 
 /** Live projection of the profile's plugin state. */
@@ -33,6 +35,8 @@ export interface ProfilePluginState {
   readonly disabledNames: ReadonlySet<string>
   /** Package names present in the profile `dependencies`. */
   readonly installedNames: ReadonlySet<string>
+  /** Catalog id (`owner/repo`) → resolved npm package name. */
+  readonly packages: ReadonlyMap<string, string>
 }
 
 /** Read profile manifest plus the parsed plugin-center sidecar. */
@@ -57,24 +61,27 @@ export function ensureProfileDir(profileDir: string, profileName: string): strin
 }
 
 /**
- * Parse the plugin-center sidecar, treating any missing or malformed file as
- * the empty state (the sidecar is best-effort durability, not the source of
- * truth — the manifest's bundles list remains authoritative).
+ * Parse the plugin-center sidecar, treating any missing or malformed field as
+ * empty (the sidecar is best-effort durability, not the source of truth — the
+ * manifest's bundles list remains authoritative).
  * @param profileDir - the absolute profile directory.
- * @returns the disabled-name set.
+ * @returns the parsed sidecar with safe defaults.
  */
-function readDisabledNames(profileDir: string): ReadonlySet<string> {
+function readSidecar(profileDir: string): PluginCenterStateFile {
   const path = join(profileDir, PLUGIN_CENTER_STATE_FILENAME)
-  if (!existsSync(path)) return new Set()
+  if (!existsSync(path)) return { disabled: [], packages: {} }
   try {
     const parsed = JSON.parse(readFileSync(path, 'utf8')) as Partial<PluginCenterStateFile> | null
-    const disabled = parsed?.disabled
-    if (Array.isArray(disabled) && disabled.every(name => typeof name === 'string')) {
-      return new Set(disabled)
-    }
-    return new Set()
+    if (parsed === null || typeof parsed !== 'object') return { disabled: [], packages: {} }
+    const disabled = Array.isArray(parsed.disabled) && parsed.disabled.every(name => typeof name === 'string')
+      ? parsed.disabled
+      : []
+    const packages = parsed.packages !== null && typeof parsed.packages === 'object' && !Array.isArray(parsed.packages)
+      ? parsed.packages
+      : {}
+    return { disabled, packages }
   } catch {
-    return new Set()
+    return { disabled: [], packages: {} }
   }
 }
 
@@ -85,33 +92,41 @@ function readDisabledNames(profileDir: string): ReadonlySet<string> {
  */
 export function readProfileState(profileDir: string): LoadedProfileState {
   const manifest = readProfileManifest('dsh', profileDir)
-  const enabledBundles = manifest.dsh?.profile?.bundles ?? []
-  const disabledNames = readDisabledNames(profileDir)
+  const sidecar = readSidecar(profileDir)
+  const packages = new Map<string, string>()
+  for (const [id, name] of Object.entries(sidecar.packages)) {
+    if (typeof name === 'string' && name !== '') packages.set(id, name)
+  }
   return {
     manifest,
     plugins: {
-      enabledBundles,
-      disabledNames,
+      enabledBundles: manifest.dsh?.profile?.bundles ?? [],
+      disabledNames: new Set(sidecar.disabled),
       installedNames: new Set(Object.keys(manifest.dependencies ?? {})),
+      packages,
     },
   }
 }
 
 /**
- * Persist the manifest's bundle list and the sidecar's disabled list. The two
- * files are written together so an enable/disable toggle cannot leave them
- * disagreeing about which bundles are composed.
+ * Persist the manifest's bundle list and the sidecar (disabled list + id→name
+ * mapping) together so a mutation cannot leave them disagreeing.
  * @param profileDir - the absolute profile directory.
  * @param manifest - the manifest to write (its `dsh.profile.bundles` must already reflect the change).
  * @param disabledNames - the full disabled-name set to persist.
+ * @param packages - the full catalog-id → package-name mapping to persist.
  */
 export function writeProfileState(
   profileDir: string,
   manifest: ProfileManifest,
   disabledNames: ReadonlySet<string>,
+  packages: ReadonlyMap<string, string>,
 ): void {
   writeProfileManifest(profileDir, manifest)
-  const sidecar: PluginCenterStateFile = { disabled: [...disabledNames].sort() }
+  const sidecar: PluginCenterStateFile = {
+    disabled: [...disabledNames].sort(),
+    packages: Object.fromEntries([...packages.entries()].sort(([left], [right]) => left.localeCompare(right))),
+  }
   writeFileSync(
     join(profileDir, PLUGIN_CENTER_STATE_FILENAME),
     JSON.stringify(sidecar, undefined, 2) + '\n',
@@ -140,26 +155,6 @@ export function withBundleEnabled(manifest: ProfileManifest, packageName: string
 }
 
 /**
- * Read one installed package's resolved version from the profile's hoisted
- * `node_modules` (pnpm's `nodeLinker: hoisted` layout). Scoped names nest under
- * their scope directory. A missing or unreadable manifest is absent, not fatal:
- * the version only feeds the update-available label.
- * @param profileDir - the absolute profile directory.
- * @param packageName - the npm package name.
- * @returns the resolved version, or null when it cannot be read.
- */
-export function readInstalledVersion(profileDir: string, packageName: string): string | null {
-  const path = join(profileDir, 'node_modules', ...packageName.split('/'), 'package.json')
-  try {
-    if (!existsSync(path)) return null
-    const manifest = JSON.parse(readFileSync(path, 'utf8')) as { version?: string } | null
-    return manifest !== null && typeof manifest.version === 'string' ? manifest.version : null
-  } catch {
-    return null
-  }
-}
-
-/**
  * Copy a manifest with one bundle removed from the layer list.
  * @param manifest - the current manifest.
  * @param packageName - the bundle name to disable or remove.
@@ -177,5 +172,25 @@ export function withBundleDisabled(manifest: ProfileManifest, packageName: strin
         bundles: current.filter(name => name !== packageName),
       },
     },
+  }
+}
+
+/**
+ * Read one installed package's resolved version from the profile's hoisted
+ * `node_modules` (pnpm's `nodeLinker: hoisted` layout). Scoped names nest under
+ * their scope directory. A missing or unreadable manifest is absent, not fatal:
+ * the version only feeds the update-available label.
+ * @param profileDir - the absolute profile directory.
+ * @param packageName - the npm package name.
+ * @returns the resolved version, or null when it cannot be read.
+ */
+export function readInstalledVersion(profileDir: string, packageName: string): string | null {
+  const path = join(profileDir, 'node_modules', ...packageName.split('/'), 'package.json')
+  try {
+    if (!existsSync(path)) return null
+    const manifest = JSON.parse(readFileSync(path, 'utf8')) as { version?: string } | null
+    return manifest !== null && typeof manifest.version === 'string' ? manifest.version : null
+  } catch {
+    return null
   }
 }

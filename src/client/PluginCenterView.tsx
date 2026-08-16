@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import type {
   PluginCenterEntry, PluginCenterSnapshot, PluginInstallState, PluginOperationResult,
-} from '@deepseek-ai/dsh-plugin-center/types'
+} from '@ticoguo/dsh-plugin-center/types'
 import type { ConvViewProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import {
   IconChevronDownOutline14, IconRefreshOutline16, IconSearchOutline16,
@@ -77,8 +77,8 @@ const SUCCESS_TOAST_KEY = {
 function actionButtons(entry: PluginCenterEntry): readonly ActionKind[] {
   switch (entry.state) {
     case 'not-installed': return ['install']
-    case 'enabled': return ['disable', 'uninstall']
-    case 'disabled': return ['enable', 'uninstall']
+    case 'enabled': return ['update', 'disable', 'uninstall']
+    case 'disabled': return ['update', 'enable', 'uninstall']
     case 'update-available': return ['update', 'disable', 'uninstall']
   }
 }
@@ -229,7 +229,7 @@ export function PluginCenterView({
                     <span className={css.cardMain}>
                       <span className={css.cardTitleRow}>
                         <strong className={css.cardTitle}>{entry.name}</strong>
-                        <span className={css.version}>{entry.version}</span>
+                        {entry.version !== '' && <span className={css.version}>{entry.version}</span>}
                       </span>
                       <span className={css.description}>{entry.description}</span>
                     </span>
@@ -255,7 +255,7 @@ export function PluginCenterView({
                 {open ? (
                   <div className={css.details}>
                     <dl>
-                      <div><dt>{t('detail.version')}</dt><dd>{entry.version}</dd></div>
+                      <div><dt>{t('detail.version')}</dt><dd>{entry.version || '—'}</dd></div>
                       <div><dt>{t('detail.installedVersion')}</dt><dd>{entry.installedVersion ?? '—'}</dd></div>
                       <div><dt>{t('detail.author')}</dt><dd>{entry.author}</dd></div>
                       <div>

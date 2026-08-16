@@ -5,12 +5,13 @@
  * harness's Typert Remote assembly (which is compiled in). Instead it registers
  * a `/plugin-center` prefix route on the web server — the same transport the
  * balance-check plugin uses — and a `plugin-center` settings namespace whose
- * `enabled` boolean is the on/off toggle rendered by the browser card.
+ * `enabled` boolean (default off) is the on/off toggle rendered by the browser
+ * card.
  *
- * The catalog is read live from GitHub (ranked by stars) with a curated
- * registry URL override; install/uninstall/update forward to pnpm inside the
- * managed profile; tarball downloads are SHA256-verified when the registry
- * publishes a digest; and every mutation is appended to a JSONL operation log.
+ * The catalog is the curated awesome-dsh-plugin list; install/uninstall/update
+ * forward to pnpm inside the managed profile (git specs resolve to a package
+ * name discovered by dependency diff and remembered in the sidecar), and every
+ * mutation is appended to a JSONL operation log.
  * @module @ticoguo/dsh-plugin-center
  */
 import type { Context } from '@deepseek-ai/cordis';
@@ -24,10 +25,10 @@ export declare const inject: string[];
 export interface Config {
     /** The profile whose directory is the install target (default `web`). */
     profile?: string;
-    /** Whether the Plugin Center is enabled (default true); toggled by the settings card. */
+    /** Whether the Plugin Center is enabled (default false); toggled by the settings card. */
     enabled?: boolean;
-    /** GitHub search query used when no curated registry is configured. */
-    githubQuery?: string;
+    /** Curated catalog README URL (default the awesome-dsh-plugin list). */
+    catalogUrl?: string;
 }
 /** Schemastery schema resolving this plugin's configuration (fields optional, like the balance-check plugin). */
 export declare const Config: z<Config>;
