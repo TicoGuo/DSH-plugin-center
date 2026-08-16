@@ -24,7 +24,10 @@ export function filterPluginEntries(
 ): readonly PluginCenterEntry[] {
   const normalized = query.trim().toLocaleLowerCase()
   return entries.filter((entry) => {
-    if (filter === 'installed' && entry.state === 'not-installed') return false
+    // "已安装" = installed and active (enabled, or enabled with an update
+    // pending); "已停用" (disabled) has its own tab and must not leak in here,
+    // otherwise disabling a plugin leaves it visible in the Installed list.
+    if (filter === 'installed' && (entry.state === 'not-installed' || entry.state === 'disabled')) return false
     if (filter === 'updatable' && entry.state !== 'update-available') return false
     if (filter === 'disabled' && entry.state !== 'disabled') return false
     if (normalized === '') return true

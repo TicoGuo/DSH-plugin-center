@@ -202,7 +202,7 @@ export function PluginCenterView({
             role="tab"
             aria-selected={filter === option}
             className={filter === option ? css.filterActive : css.filterPill}
-            onClick={() => { setFilter(option) }}
+            onClick={() => { setFilter(option); setExpandedId(null); setConfirmEntry(null) }}
           >
             {t(FILTER_LABEL_KEY[option])}
           </button>
