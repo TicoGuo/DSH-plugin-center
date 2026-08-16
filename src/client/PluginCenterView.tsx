@@ -236,7 +236,6 @@ export function PluginCenterView({
                   aria-expanded={open}
                   onClick={() => { setExpandedId(current => current === entry.id ? null : entry.id) }}
                 >
-                  <span className={css.icon} aria-hidden="true">{entry.name.charAt(0).toUpperCase()}</span>
                   <span className={css.cardMain}>
                     <span className={css.nameRow}>
                       <strong className={css.cardTitle}>{entry.name}</strong>
