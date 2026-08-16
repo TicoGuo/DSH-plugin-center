@@ -5,6 +5,7 @@
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 16px 32px;
   color: var(--dsw-alias-label-primary);
 }
@@ -250,6 +251,10 @@
   border-radius: 12px;
   background: var(--dsw-alias-bg-layer-3);
   transition: border-color .16s, box-shadow .16s;
+  /* Scroll perf: skip layout/paint for off-screen cards and contain each card. */
+  contain: content;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 150px;
 }
 
 .card:hover {
