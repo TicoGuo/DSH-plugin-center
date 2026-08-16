@@ -6,18 +6,16 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import type { PluginOperationResult } from '@ticoguo/dsh-plugin-center/types'
-import type { SessionId, SettingsScope } from '@deepseek-ai/dsh-client-runtime/client'
+import type { SettingsScope } from '@deepseek-ai/dsh-client-runtime/client'
 // Type-only: pulls the locale plugin's Context merge (ctx.locale).
 import type {} from '@deepseek-ai/dsh-client-locale/client'
-// Type-only: the 'conversation.view' SlotMap row must be in the program for register to type.
-import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 // Type-only: the settings shell's ctx.settingsScope Context merge.
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 // Type-only: the settings-plugins section's `settings.plugin.item` SlotMap merge.
 import type {} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
-// Type-only: the sidebar's `sidebar.header.action` SlotMap merge.
+// Type-only: the sidebar's `sidebar.footer.action` SlotMap merge.
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
-import { PluginCenterView, type PluginCenterListResult, type PluginCenterViewInjected } from './PluginCenterView.tsx'
+import type { PluginCenterListResult, PluginCenterViewInjected } from './PluginCenterView.tsx'
 import { PluginCenterCard } from './PluginCenterCard.tsx'
 import { PluginCenterSidebarButton } from './PluginCenterSidebarButton.tsx'
 import { PluginCenterCardController, type PluginCenterSettings } from './plugin-center-card.ts'
@@ -70,29 +68,28 @@ export function apply(ctx: Context): void {
       body: JSON.stringify({ id }),
     })
 
-  // The tab is mounted only while the feature is enabled, so the default-off
-  // state never shows "插件中心" in the Chat/Trajectory ring.
-  let disposeTab: (() => void) | null = null
-  const syncTab = (): void => {
+  // The sidebar button is mounted only while the feature is enabled, so the
+  // default-off state never shows "插件中心" in the sidebar foot.
+  let disposeButton: (() => void) | null = null
+  const syncButton = (): void => {
     const enabled = scope.getSnapshot().value?.enabled ?? false
-    if (enabled && disposeTab === null) {
-      disposeTab = ctx.slots.inject('conversation.view', () => ctx.slots.register({
-        name: 'conversation.view',
+    if (enabled && disposeButton === null) {
+      disposeButton = ctx.slots.inject('sidebar.footer.action', () => ctx.slots.register({
+        name: 'sidebar.footer.action',
         id: 'plugin-center',
         order: 20,
         locale: NS,
-        label: () => t('view.pluginCenter'),
-        inject: (_sessionId: SessionId): PluginCenterViewInjected => ({
+        inject: (): PluginCenterViewInjected => ({
           list, refresh, install, uninstall, update, setEnabled,
         }),
-      }, PluginCenterView))
-    } else if (!enabled && disposeTab !== null) {
-      disposeTab()
-      disposeTab = null
+      }, PluginCenterSidebarButton))
+    } else if (!enabled && disposeButton !== null) {
+      disposeButton()
+      disposeButton = null
     }
   }
-  syncTab()
-  scope.subscribe(syncTab)
+  syncButton()
+  scope.subscribe(syncButton)
 
   const card = new PluginCenterCardController(scope)
   ctx.slots.inject('settings.plugin.item', () => ctx.slots.register({
@@ -102,19 +99,4 @@ export function apply(ctx: Context): void {
     locale: NS,
     inject: () => card.inject(),
   }, PluginCenterCard))
-
-  // Sidebar entry: a button above the workspace that flips the main panel to
-  // the Plugin Center view (and the view's 返回对话 button flips it back).
-  ctx.slots.inject('sidebar.header.action', () => ctx.slots.register({
-    name: 'sidebar.header.action',
-    id: 'plugin-center',
-    order: 20,
-    locale: NS,
-    inject: () => ({
-      open: () => {
-        const switcher = ctx.get('conversationViewSwitch') as { switch: (viewId: string) => void } | undefined
-        switcher?.switch('plugin-center')
-      },
-    }),
-  }, PluginCenterSidebarButton))
 }

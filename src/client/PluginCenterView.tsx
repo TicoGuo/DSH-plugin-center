@@ -5,7 +5,6 @@ import type { ReactNode } from 'react'
 import type {
   PluginCenterEntry, PluginCenterSnapshot, PluginInstallState, PluginOperationResult,
 } from '@ticoguo/dsh-plugin-center/types'
-import type { ConvViewProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import {
   IconChevronDownOutline14, IconRefreshOutline16, IconSearchOutline16,
   Modal, Toast,
@@ -91,10 +90,10 @@ function actionButtons(entry: PluginCenterEntry): readonly ActionKind[] {
 
 /** The Plugin Center conversation view. */
 export function PluginCenterView({
-  t, switchView, list, refresh, install, uninstall, update, setEnabled,
-}: ConvViewProps & InjectFace<PluginCenterViewInjected> & PropsLocale<'pluginCenter'> & {
-  /** Switch the session's active conversation view (back to 'chat'). */
-  switchView?: (viewId: string) => void
+  t, onClose, list, refresh, install, uninstall, update, setEnabled,
+}: InjectFace<PluginCenterViewInjected> & PropsLocale<'pluginCenter'> & {
+  /** Close the Plugin Center overlay (return to the conversation). */
+  onClose: () => void
 }): ReactNode {
   const [state, setState] = useState<ViewState>({ status: 'loading' })
   const [query, setQuery] = useState('')
@@ -194,7 +193,7 @@ export function PluginCenterView({
           <button type="button" className={css.refresh} title={t('refresh')} aria-label={t('refresh')} onClick={runRefresh}>
             <IconRefreshOutline16 aria-hidden="true" />
           </button>
-          <button type="button" className={css.backButton} onClick={() => { switchView?.('chat') }}>
+          <button type="button" className={css.backButton} onClick={onClose}>
             {t('backToChat')}
           </button>
         </div>
