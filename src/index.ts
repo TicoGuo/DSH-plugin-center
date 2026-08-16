@@ -281,11 +281,14 @@ export function apply(ctx: Context, config: Config = {}): void {
         appendOperationLog(profileDir, action, packageName, entry.version, false, pmResult.output)
         return failure(action, packageName, entry.version, 'uninstall-failed', pmResult.output)
       }
+      // Re-read after pnpm remove: pnpm already dropped the dependency from the
+      // manifest, so writing the pre-remove snapshot would resurrect it.
+      const after = readProfileState(profileDir)
       writeProfileState(
         profileDir,
-        withBundleDisabled(loaded.manifest, packageName),
-        withoutDisabled(loaded.plugins.disabledNames, packageName),
-        withoutPackage(loaded.plugins.packages, entry.id),
+        withBundleDisabled(after.manifest, packageName),
+        withoutDisabled(after.plugins.disabledNames, packageName),
+        withoutPackage(after.plugins.packages, entry.id),
       )
       const message = `uninstalled ${packageName}`
       appendOperationLog(profileDir, action, packageName, entry.version, true, message)
