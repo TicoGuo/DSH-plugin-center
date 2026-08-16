@@ -7,11 +7,5 @@ import type { Context } from '@deepseek-ai/cordis';
 export type { PluginCenterViewInjected } from './PluginCenterView.tsx';
 /** Services required: the conversation slot, locale, and the settings scope. */
 export declare const inject: string[];
-/**
- * Client plugin body: register the settings enable card and, while enabled,
- * the conversation view tab. Both registrations ride the slot service's effect
- * wrapper, so plugin unload removes them.
- * @param ctx - client root context.
- */
 export declare function apply(ctx: Context): void;
 //# sourceMappingURL=index.d.ts.map

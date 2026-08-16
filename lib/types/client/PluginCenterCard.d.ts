@@ -1,4 +1,4 @@
-/** The Plugin Center settings card: description + enable toggle. */
+/** The Plugin Center settings card: mirrors the native plugin-card chrome. */
 import type { ReactNode } from 'react';
 import type { InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots';
 import type { PluginCenterCardFace } from './plugin-center-card.ts';
