@@ -116,12 +116,14 @@
 /* ── filter tabs (mirrors the 对话/轨迹 view-ring tab chrome) ─────────────── */
 
 .tabs {
-  position: relative;
-  z-index: 1;
+  position: sticky;
+  top: 0;
+  z-index: 2;
   display: flex;
   gap: 36px;
-  margin-top: 4px;
+  padding-top: 4px;
   padding-left: 8px;
+  background: var(--dsw-alias-bg-layer-1);
 }
 
 .tab {
