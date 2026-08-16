@@ -33,7 +33,7 @@ const SPEC_PATTERN = /input[^>]*value="dsh plugin --profile web add ([^"]+)"/
  * @returns frozen entries for every parsed plugin card.
  */
 export function parseAwesomeHtml(html: string): readonly PluginRegistryEntry[] {
-  const entries: PluginRegistryEntry[] = []
+  const raw: PluginRegistryEntry[] = []
   let match: RegExpExecArray | null
   while ((match = CARD_PATTERN.exec(html)) !== null) {
     const card = match[1] ?? ''
@@ -50,7 +50,7 @@ export function parseAwesomeHtml(html: string): readonly PluginRegistryEntry[] {
     if (owner === '' || repo === '' || spec === '') continue
     const stars = starsMatch !== null ? Number.parseInt(starsMatch[1] ?? '', 10) : 0
     const description = descMatch !== null ? (descMatch[1] ?? '').trim() : ''
-    entries.push(Object.freeze({
+    raw.push({
       id: `${owner}/${fullRepo}`,
       name: fullRepo,
       packageName: spec,
@@ -63,9 +63,19 @@ export function parseAwesomeHtml(html: string): readonly PluginRegistryEntry[] {
       changelog: '',
       requirements: Object.freeze([]),
       spec,
-    }))
+    })
   }
-  return Object.freeze(entries)
+  // Two cards can share one repo slug while installing different subpackages
+  // (the install spec carries the `#path:/packages/<name>` subpath, e.g. two
+  // `dsh-vscode-review` rows). Give every colliding id a spec-derived suffix
+  // so the React list and the remembered id→package map keep them distinct.
+  const counts = new Map<string, number>()
+  for (const entry of raw) counts.set(entry.id, (counts.get(entry.id) ?? 0) + 1)
+  return Object.freeze(raw.map((entry) => {
+    if ((counts.get(entry.id) ?? 0) === 1) return Object.freeze(entry)
+    const subpath = entry.spec.includes('#') ? entry.spec.slice(entry.spec.indexOf('#')) : ''
+    return Object.freeze({ ...entry, id: `${entry.id}${subpath}` })
+  }))
 }
 
 /**
