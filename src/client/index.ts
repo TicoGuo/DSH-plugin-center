@@ -44,10 +44,13 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
  * wrapper, so plugin unload removes them.
  * @param ctx - client root context.
  */
+/** Host settings namespace (must match the host `settingsNamespace('plugin-center')`). */
+const SETTINGS_NS = 'plugin-center'
+
 export function apply(ctx: Context): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-plugin-center: dictionaries')
   const t = ctx.locale.bind(NS)
-  const scope = ctx.settingsScope.bind({ namespace: NS }) as SettingsScope<PluginCenterSettings>
+  const scope = ctx.settingsScope.bind({ namespace: SETTINGS_NS }) as SettingsScope<PluginCenterSettings>
 
   const list = (): Promise<PluginCenterListResult> => request<PluginCenterListResult>('/list')
   const refresh = (): Promise<PluginCenterListResult> =>
