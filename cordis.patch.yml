@@ -1,0 +1,10 @@
+# The dsh-plugin-center bundle patch: the Plugin Center as ONE dual-face insert
+# over the profile tree. Applied after dsh-base and dsh-web-app; later patches
+# and the user's profile cordis.patch.yml address this row by id.
+
+- insert:
+    # Plugin Center: the node half is the /plugin-center routes + the
+    # plugin-center settings namespace; the browser half (./client) is
+    # auto-discovered from this package's dsh.client declaration.
+    - id: plugin-center
+      name: '@ticoguo/dsh-plugin-center'

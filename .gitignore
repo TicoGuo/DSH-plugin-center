@@ -1,0 +1,3 @@
+# Build artifacts that pnpm/git installs do not need.
+lib/**/*.map
+lib/**/*.tsbuildinfo
