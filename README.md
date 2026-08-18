@@ -1,8 +1,8 @@
 # @TicoGuo/dsh-plugin-center
 
-> DeepSeek Harness（`dsh`）的插件中心 —— 在对话界面里一键发现、安装、更新、管理社区插件。
+> DeepSeek Harness（`dsh`）的插件中心 —— 在侧边栏一键发现、安装、更新、管理社区插件。
 
-这是一个「双面包」插件：装上它，你就能在 **设置 → 插件 → 插件配置** 里打开「插件中心」开关，之后「对话 / 轨迹」标签旁会出现「插件中心」入口。插件列表实时来自 [awesome-dsh-plugin.com](https://awesome-dsh-plugin.com/zh/) 精选列表（800+ 个社区插件），按 GitHub 星标热度排序，以卡片形式展示，支持一键安装 / 更新 / 停用 / 启用 / 卸载。
+这是一个「双面包」插件：装上并重启后，侧边栏底部会出现「插件中心」按钮，点击后在右侧滑出面板里浏览插件列表。插件列表实时来自 [awesome-dsh-plugin.com](https://awesome-dsh-plugin.com/zh/) 精选列表（800+ 个社区插件），按 GitHub 星标热度排序，以卡片形式展示，支持一键安装 / 更新 / 停用 / 启用 / 卸载。
 
 ## ✨ 特性
 
@@ -10,13 +10,13 @@
 - **卡片式浏览** —— 科技简约风卡片：图标、名称、作者、星标、简介、安装状态一屏可见。
 - **搜索 + 筛选** —— 按名称/描述搜索，按「全部 / 已安装 / 可更新 / 已停用」分段筛选。
 - **一键管理** —— 安装 / 更新 / 停用 / 启用 / 卸载，全程有 Loading 与 Toast 反馈；卸载有二次确认。
-- **开箱即用** —— 默认关闭，由「插件中心」设置卡片开关控制标签显隐，互不干扰。
+- **开箱即用** —— 默认开启，安装重启后侧边栏即出现入口，无需额外配置。
 - **浅色 / 深色自适应** —— 全部使用 DSH 主题 token，跟随界面主题自动切换。
 
 ## 🖥 界面一览
 
-- **设置 → 插件 → 插件配置 → 插件中心**：原生卡片样式的「启用插件中心」开关。
-- **对话页 → 插件中心**：顶部标题 + 统计、搜索框、圆形刷新、分段筛选胶囊；下方为响应式双列插件卡片网格。
+- **侧边栏底部 → 插件中心按钮**：点击后在右侧滑出插件中心面板。
+- 面板内：顶部标题 + 统计、搜索框、圆形刷新、分段筛选胶囊；下方为响应式双列插件卡片网格。
 - 点击卡片展开详情：简介、作者、星标、GitHub 仓库链接、安装命令、已安装版本。
 
 ## 前置条件
@@ -65,9 +65,9 @@ npx @deepseek-ai/dsh plugin --profile web add github:TicoGuo/DSH-plugin-center
 
 ## 使用
 
-插件中心**默认关闭**。先进入 **设置 → 插件 → 插件配置 → 插件中心**，打开「启用插件中心」开关：
+插件中心**默认开启**。安装并重启 `dsh web` 后：
 
-- 开启后，「对话 / 轨迹」标签旁才会出现「插件中心」标签；再次关闭开关，标签即隐藏。
+- 侧边栏底部出现「插件中心」按钮，点击即可打开插件列表面板。
 - 插件列表实时读取 [awesome-dsh-plugin.com](https://awesome-dsh-plugin.com/zh/) 精选列表，按星标热度排序展示。
 - 卡片显示图标、名称、作者、星标、简介、状态（未安装 / 已启用 / 已停用 / 可更新），并提供安装 / 启用 / 停用 / 更新 / 卸载按钮；点击卡片展开详情（简介、作者、星标、仓库、安装命令、已安装版本）。
 
@@ -104,15 +104,13 @@ npx @deepseek-ai/dsh plugin --profile web remove @ticoguo/dsh-plugin-center
 
 ## 常见问题
 
-- **看不到「插件中心」开关卡片？** 需要在宿主 DSH 的 `WEB_SETTINGS_NAMESPACES` 白名单中加入 `plugin-center`（见「依赖说明」），并用该改动重新构建 DSH。
 - **列表为空或提示无法加载？** 插件中心依赖 awesome-dsh-plugin.com 的网络可达性；若长时间加载失败，点击「检查更新」重试。
 - **安装后不生效？** 安装/卸载/更新只写 profile 清单与 pnpm 状态，需重启 `dsh web` 才会组合新装的 bundle。
 
 ## 依赖说明
 
 - 运行时依赖 DSH 核心包（`@deepseek-ai/cordis`、`@deepseek-ai/dsh-*`、`@deepseek-ai/schemastery`、`react`），它们由使用者的 DSH 安装提供，无需单独安装。
-- 开关卡片依赖宿主 DSH 将 `plugin-center` 命名空间列入 apiproxy 的 `WEB_SETTINGS_NAMESPACES` 白名单（`packages/host/apiproxy/src/api-proxy.ts`）。
-- 本包是「双面包」：`lib/index.js` 是宿主（`/plugin-center` 路由 + 设置命名空间），`lib/client.js` 是浏览器端（视图 + 卡片），`cordis.patch.yml` 是 bundle 补丁。
+- 本包是「双面包」：`lib/index.js` 是宿主（`/plugin-center` 路由），`lib/client.js` 是浏览器端（侧边栏按钮 + 面板），`cordis.patch.yml` 是 bundle 补丁。
 
 ## 给插件作者
 
