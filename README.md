@@ -112,10 +112,6 @@ npx @deepseek-ai/dsh plugin --profile web remove @ticoguo/dsh-plugin-center
 - 运行时依赖 DSH 核心包（`@deepseek-ai/cordis`、`@deepseek-ai/dsh-*`、`@deepseek-ai/schemastery`、`react`），它们由使用者的 DSH 安装提供，无需单独安装。
 - 本包是「双面包」：`lib/index.js` 是宿主（`/plugin-center` 路由），`lib/client.js` 是浏览器端（侧边栏按钮 + 面板），`cordis.patch.yml` 是 bundle 补丁。
 
-## 给插件作者
-
-想让你的 DSH 插件被收录，向 [awesome-dsh-plugin/awesome-dsh-plugin](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin) 仓库提交 PR（README 的插件列表），即可出现在插件中心，并按 GitHub 星标参与热度排序。
-
 ## 目录
 
 - `cordis.patch.yml` — bundle 补丁
