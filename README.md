@@ -86,6 +86,16 @@ npx @deepseek-ai/dsh plugin --profile web add github:TicoGuo/DSH-plugin-center
 
 > 插件中心自身做了两层防护：① 所有会改动状态的接口（安装/卸载/更新/启停/开关/刷新）校验 `Origin`/`Referer`，跨站网页发起的伪造请求会被 403 拒绝；② 传给 pnpm 的所有参数经过白名单字符校验，恶意目录条目无法在 Windows 上注入 shell 命令。
 
+## 更新
+
+新版本发布后，重新执行同一条安装命令即可拉取最新代码覆盖旧版本（pnpm 会重新解析 `github:` 源到最新提交）：
+
+```bash
+dsh plugin --profile web add github:TicoGuo/DSH-plugin-center
+```
+
+或使用已装的插件中心/`dsh plugin` 更新该包（`dsh plugin --profile web update @ticoguo/dsh-plugin-center`），更新后重启 `dsh web` 生效。
+
 ## 卸载
 
 一条命令即可卸载：
