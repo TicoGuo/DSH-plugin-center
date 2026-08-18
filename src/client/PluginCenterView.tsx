@@ -9,7 +9,7 @@ import {
   IconChevronDownOutline14, IconRefreshOutline16, IconSearchOutline16,
   Modal, Toast,
 } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
+import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { PluginCenterKey } from './locales.ts'
 import {
   filterPluginEntries, PLUGIN_CENTER_FILTERS, type PluginCenterFilter,
@@ -27,6 +27,14 @@ export interface PluginCenterViewInjected {
   uninstall: (id: string) => Promise<PluginOperationResult>
   update: (id: string) => Promise<PluginOperationResult>
   setEnabled: (id: string, enabled: boolean) => Promise<PluginOperationResult>
+}
+
+/** The full view prop set: the injected ops plus the live feature flag. */
+export interface PluginCenterViewProps extends PluginCenterViewInjected {
+  /** Whether the plugin-center feature is on; `null` while the status is unresolved. */
+  featureEnabled: boolean | null
+  /** Flip the feature flag (the shared store refreshes on success). */
+  setFeatureEnabled: (enabled: boolean) => Promise<{ ok: boolean; enabled: boolean }>
 }
 
 /** The mutation verbs the view drives (for pending state and success copy). */
@@ -90,8 +98,16 @@ function actionButtons(entry: PluginCenterEntry): readonly ActionKind[] {
 
 /** The Plugin Center conversation view. */
 export function PluginCenterView({
-  t, list, refresh, install, uninstall, update, setEnabled,
-}: InjectFace<PluginCenterViewInjected> & PropsLocale<'pluginCenter'>): ReactNode {
+  t,
+  list,
+  refresh,
+  install,
+  uninstall,
+  update,
+  setEnabled,
+  featureEnabled,
+  setFeatureEnabled,
+}: PluginCenterViewProps & PropsLocale<'pluginCenter'>): ReactNode {
   const [state, setState] = useState<ViewState>({ status: 'loading' })
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<PluginCenterFilter>('all')
@@ -99,6 +115,8 @@ export function PluginCenterView({
   const [pending, setPending] = useState<ReadonlySet<string>>(new Set())
   const [confirmEntry, setConfirmEntry] = useState<PluginCenterEntry | null>(null)
   const [toast, setToast] = useState<ToastState | null>(null)
+  const [featureBusy, setFeatureBusy] = useState(false)
+  const [featureError, setFeatureError] = useState<string | null>(null)
   const toastSeq = useRef(0)
 
   const applyResult = useCallback((result: PluginCenterListResult) => {
@@ -110,7 +128,11 @@ export function PluginCenterView({
     void list().then(applyResult, () => { setState({ status: 'error' }) })
   }, [applyResult, list])
 
-  useEffect(() => { load() }, [load])
+  // Load the list only while the feature is enabled; the disabled state has
+  // its own panel, and the flag flipping on (re-enable) triggers a fresh load.
+  useEffect(() => {
+    if (featureEnabled === true) load()
+  }, [featureEnabled, load])
 
   const reload = useCallback(() => {
     void list().then(applyResult, () => { setState({ status: 'error' }) })
@@ -150,12 +172,43 @@ export function PluginCenterView({
     })
   }, [reload, t])
 
+  const enableFeature = useCallback(() => {
+    setFeatureBusy(true)
+    setFeatureError(null)
+    void setFeatureEnabled(true).catch((error: unknown) => {
+      setFeatureError(error instanceof Error ? error.message : String(error))
+    }).finally(() => {
+      setFeatureBusy(false)
+    })
+  }, [setFeatureEnabled])
+
+  // Derived view data (hooks must stay unconditional, so these are computed
+  // before the feature-flag early returns even when unused).
   const snapshot = state.status === 'ready' ? state.snapshot : undefined
   const loadError = state.status === 'ready' ? state.error : null
   const filtered = useMemo(
     () => snapshot === undefined ? [] : filterPluginEntries(snapshot.entries, query, filter),
     [filter, query, snapshot],
   )
+
+  // The feature flag is unresolved: neutral loading state, no list request.
+  if (featureEnabled === null) {
+    return <p className={css.status}>{t('loading')}</p>
+  }
+
+  // Feature disabled: explain and offer the one-click re-enable (the sidebar
+  // button stays mounted, so the panel is the recovery surface).
+  if (featureEnabled === false) {
+    return (
+      <div className={css.disabled} role="status">
+        <p>{t('disabled')}</p>
+        <button type="button" disabled={featureBusy} onClick={enableFeature}>
+          {featureBusy ? t('loading') : t('enableFeature')}
+        </button>
+        {featureError !== null ? <p className={css.error} role="alert">{featureError}</p> : null}
+      </div>
+    )
+  }
 
   const invoke = (id: string, action: ActionKind): void => {
     switch (action) {
@@ -216,7 +269,7 @@ export function PluginCenterView({
       {state.status === 'error' ? (
         <div className={css.failure}>
           <p role="alert">{t('error')}</p>
-          <button type="button" onClick={load}>{t('retry')}</button>
+          <button type="button" onClick={runRefresh}>{t('retry')}</button>
         </div>
       ) : null}
       {snapshot !== undefined && snapshot.entries.length === 0 && loadError === null

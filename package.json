@@ -1,6 +1,6 @@
 {
   "name": "@ticoguo/dsh-plugin-center",
-  "description": "DSH 插件中心（双面包）：/plugin-center 路由 + 设置开关，实时读取 GitHub 上的 DSH 插件并按热度排序，支持安装/更新/停用/启用/卸载",
+  "description": "DSH 插件中心（双面包）：/plugin-center 路由 + 侧边栏入口，实时读取 GitHub 上的 DSH 插件并按热度排序，支持安装/更新/停用/启用/卸载",
   "version": "0.1.0-rc.5",
   "license": "MIT",
   "type": "module",
@@ -52,6 +52,23 @@
   },
   "dependencies": {
     "@deepseek-ai/schemastery": "^3.18.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.0",
+    "@types/react": "^18.3.31",
+    "@types/react-dom": "^18.3.7",
+    "lightningcss": "^1.32.0",
+    "tsdown": "^0.22.2",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.8"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json && tsc -p tsconfig.client.json && tsdown",
+    "build:host": "tsc -p tsconfig.json && tsdown",
+    "build:client": "tsc -p tsconfig.client.json && tsdown",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.client.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",

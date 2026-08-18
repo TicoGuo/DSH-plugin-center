@@ -12,6 +12,12 @@
  * forward to pnpm inside the managed profile (git specs resolve to a package
  * name discovered by dependency diff and remembered in the sidecar), and every
  * mutation is appended to a JSONL operation log.
+ *
+ * Security posture: every state-changing route rejects cross-site requests
+ * (browsers always send `Origin`, so a malicious page cannot drive installs —
+ * installing a plugin runs its code with the user's privileges), and every
+ * pnpm argument is validated against a character allowlist before it reaches
+ * the shell on Windows (see package-manager.ts).
  * @module @ticoguo/dsh-plugin-center
  */
 
@@ -27,7 +33,7 @@ import { loadRegistry } from './registry.ts'
 import { mergeCatalog } from './merge.ts'
 import {
   ensureProfileDir, readInstalledVersion, readProfileState, withBundleDisabled,
-  withBundleEnabled, writeProfileState,
+  withBundleEnabled, writeProfileState, type LoadedProfileState,
 } from './profile-state.ts'
 import { createPnpmPackageManager, type PackageManager } from './package-manager.ts'
 import { appendOperationLog, readOperationLog } from './operation-log.ts'
@@ -98,6 +104,81 @@ function withoutPackage(packages: ReadonlyMap<string, string>, id: string): Read
   return next
 }
 
+/** How long a successful catalog load is served before a newer fetch is attempted. */
+const CATALOG_TTL_MS = 15 * 60_000
+
+/** npm registry endpoint used to resolve the latest published version of installed packages. */
+const NPM_LATEST_URL = 'https://registry.npmjs.org/'
+
+/** Per-package latest-version lookup timeout. */
+const VERSION_TIMEOUT_MS = 8_000
+
+/** Freshness window for the resolved latest-version cache. */
+const VERSION_TTL_MS = 30 * 60_000
+
+/** Cap on a request body so a misbehaving client cannot buffer unbounded JSON. */
+const MAX_BODY_BYTES = 64 * 1024
+
+/** Loopback host literals accepted as same-machine origins. */
+const TRUSTED_ORIGIN_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]'])
+
+/** One request whose body or route was invalid; mapped to a 4xx response instead of a 500. */
+class RequestError extends Error {
+  constructor(
+    readonly status: number,
+    readonly code: string,
+    message: string,
+  ) {
+    super(message)
+  }
+}
+
+/**
+ * Whether an `Origin`/`Referer` value points at this machine (loopback, or the
+ * host the browser actually navigated to — the `Host` header). Browsers set
+ * `Origin` themselves and a cross-site page cannot forge it, so an origin that
+ * matches neither is a cross-site request.
+ * @param value - the `Origin` or `Referer` header.
+ * @param host - the request's `Host` header.
+ * @returns whether the value is a same-machine origin.
+ */
+function isTrustedOrigin(value: string, host: string): boolean {
+  try {
+    const url = new URL(value)
+    if (url.protocol !== 'http:') return false
+    const hostname = url.hostname.toLowerCase()
+    if (TRUSTED_ORIGIN_HOSTS.has(hostname)) return true
+    return url.host === host || url.hostname === host
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Reject browser-originated cross-site writes. The harness's web server does
+ * no origin policy, so without this a malicious page could POST a JSON body to
+ * the loopback route (a `no-cors` fetch still delivers it) and trigger
+ * install/uninstall of arbitrary plugins. Browsers send `Origin` on every POST;
+ * a missing Origin means a non-browser client (curl, scripts), which is
+ * allowed. The Referer fallback covers clients that send only it.
+ * @param req - the incoming request.
+ * @returns null when the request is trusted, otherwise a rejection message.
+ */
+function crossOriginReason(req: IncomingMessage): string | null {
+  const host = typeof req.headers.host === 'string' ? req.headers.host : ''
+  const origin = req.headers.origin
+  if (typeof origin === 'string' && origin !== '') {
+    if (isTrustedOrigin(origin, host)) return null
+    return `cross-origin request rejected (origin "${origin}")`
+  }
+  const referer = req.headers.referer
+  if (typeof referer === 'string' && referer !== '') {
+    if (isTrustedOrigin(referer, host)) return null
+    return `cross-origin request rejected (referer "${referer}")`
+  }
+  return null
+}
+
 /**
  * Mount the `/plugin-center` route tree. The on/off toggle is persisted in the
  * profile sidecar (not a settings namespace), so no harness change is required.
@@ -108,33 +189,140 @@ export function apply(ctx: Context, config: Config = {}): void {
   const current = (): Config => config
 
   const packageManager: PackageManager = createPnpmPackageManager()
+
+  // ---- Catalog cache: TTL-fresh, failure-retrying, stale-while-revalidate. ----
   let registryCache: readonly PluginRegistryEntry[] | null = null
   let registryError: string | null = null
   let registryLoad: Promise<void> | null = null
+  let registryLoading = false
+  let registryLoadedAt = 0
 
-  const loadCatalog = (catalogUrl: string): Promise<void> => {
-    registryLoad ??= loadRegistry(catalogUrl).then((result) => {
-      registryCache = result.entries
+  const beginRegistryLoad = (catalogUrl: string): Promise<void> => {
+    registryLoading = true
+    const load = loadRegistry(catalogUrl).then((result) => {
       registryError = result.error
+      if (result.error === null) {
+        registryCache = result.entries
+        registryLoadedAt = Date.now()
+      }
+      // On failure the previous successful entries (if any) are kept as a
+      // stale fallback and the error is surfaced to the browser.
+    }).finally(() => {
+      registryLoading = false
     })
-    return registryLoad
+    registryLoad = load
+    return load
+  }
+
+  /**
+   * Ensure a catalog is available. A fresh successful load is reused for the
+   * TTL window; an expired or failed load starts a new fetch — a failure is
+   * never cached, so the client's Retry button genuinely retries.
+   */
+  const ensureCatalog = (catalogUrl: string): Promise<void> => {
+    if (registryLoading) return registryLoad ?? Promise.resolve()
+    const fresh = registryLoadedAt !== 0 && Date.now() - registryLoadedAt < CATALOG_TTL_MS
+    if (fresh) return Promise.resolve()
+    return beginRegistryLoad(catalogUrl)
+  }
+
+  /** Drop the cache and fetch from scratch (the explicit refresh route). */
+  const forceCatalogRefresh = (catalogUrl: string): Promise<void> => {
+    registryCache = null
+    registryError = null
+    registryLoadedAt = 0
+    if (registryLoading) return registryLoad ?? Promise.resolve()
+    return beginRegistryLoad(catalogUrl)
+  }
+
+  // ---- Latest published versions for installed packages (npm registry). ----
+  const latestVersions = new Map<string, string>()
+  const versionCache = new Map<string, { version: string | null; at: number }>()
+  const versionLoads = new Map<string, Promise<string | null>>()
+
+  /**
+   * Resolve one installed package's latest published version, coalescing
+   * concurrent lookups and caching successes for the TTL window. Failures
+   * return null and are retried on the next refresh.
+   * @param packageName - the installed npm package name.
+   * @returns the latest version, or null when unknown.
+   */
+  const resolveLatestVersion = async (packageName: string): Promise<string | null> => {
+    const cached = versionCache.get(packageName)
+    if (cached !== undefined && Date.now() - cached.at < VERSION_TTL_MS) return cached.version
+    let pending = versionLoads.get(packageName)
+    if (pending === undefined) {
+      pending = (async () => {
+        try {
+          const response = await fetch(`${NPM_LATEST_URL}${encodeURIComponent(packageName)}/latest`, {
+            signal: AbortSignal.timeout(VERSION_TIMEOUT_MS),
+            headers: { Accept: 'application/json' },
+          })
+          if (!response.ok) return null
+          const body = await response.json() as { version?: unknown }
+          return typeof body.version === 'string' && body.version !== '' ? body.version : null
+        } catch {
+          return null
+        }
+      })().finally(() => {
+        versionLoads.delete(packageName)
+      })
+      versionLoads.set(packageName, pending)
+    }
+    const version = await pending
+    if (version !== null) versionCache.set(packageName, { version, at: Date.now() })
+    return version
+  }
+
+  /** Refresh the latest-version map for the installed set (fire-and-forget or awaited). */
+  const refreshLatestVersions = (installedNames: readonly string[]): Promise<void> => {
+    const names = [...new Set(installedNames)].sort()
+    if (names.length === 0) return Promise.resolve()
+    return Promise.all(names.map(name => resolveLatestVersion(name))).then((versions) => {
+      names.forEach((name, index) => {
+        const version = versions[index] ?? null
+        if (version !== null) latestVersions.set(name, version)
+      })
+    })
+  }
+
+  // ---- State-mutation serialization. ----
+  // Read → pnpm → write must not interleave: two concurrent requests could
+  // otherwise overwrite each other's manifest change (lost update).
+  let mutationChain: Promise<unknown> = Promise.resolve()
+  const exclusive = <T>(task: () => Promise<T>): Promise<T> => {
+    const run = mutationChain.then(task, task)
+    mutationChain = run.catch(() => undefined)
+    return run
   }
 
   const findEntry = async (id: string): Promise<PluginRegistryEntry | null> => {
-    await loadCatalog(effectiveCatalogUrl(current()))
+    await ensureCatalog(effectiveCatalogUrl(current()))
     return registryCache?.find(entry => entry.id === id) ?? null
   }
 
-  const buildSnapshot = (registry: readonly PluginRegistryEntry[]): PluginCenterSnapshot => {
-    const profileName = effectiveProfile(current())
-    const profileDir = ensureProfileDir(resolveProfileDir(profileName), profileName)
-    const loaded = readProfileState(profileDir)
+  /** Installed versions + package names for the current profile. */
+  const installedFacts = (
+    profileDir: string,
+    loaded: LoadedProfileState,
+  ): { versions: Map<string, string>; names: string[] } => {
     const versions = new Map<string, string>()
+    const names: string[] = []
     for (const packageName of loaded.plugins.packages.values()) {
+      names.push(packageName)
       const version = readInstalledVersion(profileDir, packageName)
       if (version !== null) versions.set(packageName, version)
     }
-    return mergeCatalog(registry, loaded.plugins, versions)
+    return { versions, names }
+  }
+
+  const buildSnapshot = (
+    profileDir: string,
+    loaded: LoadedProfileState,
+    registry: readonly PluginRegistryEntry[],
+  ): PluginCenterSnapshot => {
+    const { versions } = installedFacts(profileDir, loaded)
+    return mergeCatalog(registry, loaded.plugins, versions, latestVersions)
   }
 
   const resolveInstallSpec = async (entry: PluginRegistryEntry): Promise<ResolvedInstallSpec> => {
@@ -167,8 +355,32 @@ export function apply(ctx: Context, config: Config = {}): void {
   )
 
   /** Resolve the durable npm name for a catalog id, preferring the remembered mapping. */
-  const resolvedName = (loaded: ReturnType<typeof readProfileState>, entry: PluginRegistryEntry): string =>
+  const resolvedName = (loaded: LoadedProfileState, entry: PluginRegistryEntry): string =>
     loaded.plugins.packages.get(entry.id) ?? entry.packageName
+
+  /**
+   * Find the real installed package name for a catalog entry that is already
+   * installed — by this center (remembered mapping), by its npm name directly,
+   * or through the manifest dependency whose spec starts with the entry's
+   * origin (`github:owner/repo`). Prevents a second install from writing the
+   * raw git spec into the bundle layer list.
+   */
+  const knownInstalledName = (
+    loaded: LoadedProfileState,
+    entry: PluginRegistryEntry,
+    profileDir: string,
+  ): string | null => {
+    const remembered = loaded.plugins.packages.get(entry.id)
+    if (remembered !== undefined) return remembered
+    if (readInstalledVersion(profileDir, entry.packageName) !== null) return entry.packageName
+    const origin = (entry.spec.split('#', 1)[0] ?? entry.spec).trim()
+    if (origin !== '') {
+      for (const [name, spec] of Object.entries(loaded.manifest.dependencies ?? {})) {
+        if (typeof spec === 'string' && spec.startsWith(origin)) return name
+      }
+    }
+    return null
+  }
 
   const installOne = async (id: string): Promise<PluginOperationResult> => {
     const action: PluginOperation = 'install'
@@ -178,6 +390,22 @@ export function apply(ctx: Context, config: Config = {}): void {
     const profileDir = ensureProfileDir(resolveProfileDir(profileName), profileName)
     let tempPath: string | null = null
     try {
+      const loaded = readProfileState(profileDir)
+      // Already installed (by this center or by `dsh plugin`): installing again
+      // is just "make sure it is enabled", with the REAL package name.
+      const existing = knownInstalledName(loaded, entry, profileDir)
+      if (existing !== null) {
+        writeProfileState(
+          profileDir,
+          withBundleEnabled(loaded.manifest, existing),
+          loaded.enabled,
+          withoutDisabled(loaded.plugins.disabledNames, existing),
+          withPackage(loaded.plugins.packages, entry.id, existing),
+        )
+        const message = `enabled already-installed ${existing}`
+        appendOperationLog(profileDir, action, existing, entry.version, true, message)
+        return success(action, existing, entry.version, false, message)
+      }
       const resolved = await resolveInstallSpec(entry)
       tempPath = resolved.tempPath
       const before = readProfileState(profileDir)
@@ -309,6 +537,9 @@ export function apply(ctx: Context, config: Config = {}): void {
       path: '/plugin-center',
       handler: (req, res) => { void dispatch(req, res) },
     })
+    // Warm the catalog in the background so the first open of the panel does
+    // not wait for a cold fetch.
+    void ensureCatalog(effectiveCatalogUrl(current())).catch(() => {})
     return () => { disposeRoute() }
   }, 'plugin-center: /plugin-center routes')
 
@@ -317,6 +548,7 @@ export function apply(ctx: Context, config: Config = {}): void {
     const profileDir = ensureProfileDir(resolveProfileDir(profileName), profileName)
     const pathname = (req.url ?? '/').split('?', 1)[0] ?? '/'
     const sub = pathname === '/plugin-center' ? '' : pathname.slice('/plugin-center'.length)
+    const catalogUrl = effectiveCatalogUrl(current())
     try {
       // Feature on/off (sidecar-owned, default on). These two routes stay
       // reachable even while disabled so the flag can be read + flipped.
@@ -325,10 +557,18 @@ export function apply(ctx: Context, config: Config = {}): void {
         return
       }
       if (sub === '/set-enabled' && req.method === 'POST') {
+        const rejection = crossOriginReason(req)
+        if (rejection !== null) {
+          sendJson(res, 403, { ok: false, code: 'forbidden', message: rejection })
+          return
+        }
         const body = await readJsonBody(req) as Record<string, unknown>
         const enabled = body.enabled === true
-        const loaded = readProfileState(profileDir)
-        writeProfileState(profileDir, loaded.manifest, enabled, loaded.plugins.disabledNames, loaded.plugins.packages)
+        await exclusive(() => {
+          const loaded = readProfileState(profileDir)
+          writeProfileState(profileDir, loaded.manifest, enabled, loaded.plugins.disabledNames, loaded.plugins.packages)
+          return Promise.resolve()
+        })
         sendJson(res, 200, { ok: true, enabled })
         return
       }
@@ -337,16 +577,32 @@ export function apply(ctx: Context, config: Config = {}): void {
         return
       }
       if (sub === '/list' && (req.method === 'GET' || req.method === 'HEAD')) {
-        await loadCatalog(effectiveCatalogUrl(current()))
-        sendJson(res, 200, { ok: true, ...buildSnapshot(registryCache ?? []), error: registryError })
+        await ensureCatalog(catalogUrl)
+        const loaded = readProfileState(profileDir)
+        const { names } = installedFacts(profileDir, loaded)
+        void refreshLatestVersions(names).catch(() => {})
+        sendJson(res, 200, {
+          ok: true,
+          ...buildSnapshot(profileDir, loaded, registryCache ?? []),
+          error: registryError,
+        })
         return
       }
       if (sub === '/refresh' && req.method === 'POST') {
-        registryCache = null
-        registryError = null
-        registryLoad = null
-        await loadCatalog(effectiveCatalogUrl(current()))
-        sendJson(res, 200, { ok: true, ...buildSnapshot(registryCache ?? []), error: registryError })
+        const rejection = crossOriginReason(req)
+        if (rejection !== null) {
+          sendJson(res, 403, { ok: false, code: 'forbidden', message: rejection })
+          return
+        }
+        await forceCatalogRefresh(catalogUrl)
+        const loaded = readProfileState(profileDir)
+        const { names } = installedFacts(profileDir, loaded)
+        await refreshLatestVersions(names)
+        sendJson(res, 200, {
+          ok: true,
+          ...buildSnapshot(profileDir, loaded, registryCache ?? []),
+          error: registryError,
+        })
         return
       }
       if (sub === '/logs' && (req.method === 'GET' || req.method === 'HEAD')) {
@@ -358,21 +614,30 @@ export function apply(ctx: Context, config: Config = {}): void {
           sendJson(res, 405, { ok: false, code: 'method-not-allowed', message: 'method not allowed' })
           return
         }
+        const rejection = crossOriginReason(req)
+        if (rejection !== null) {
+          sendJson(res, 403, { ok: false, code: 'forbidden', message: rejection })
+          return
+        }
         const body = await readJsonBody(req) as Record<string, unknown>
         const id = typeof body.id === 'string' ? body.id : ''
         if (id === '') {
           sendJson(res, 400, { ok: false, code: 'bad-request', message: 'missing plugin id' })
           return
         }
-        if (sub === '/install') sendJson(res, 200, await installOne(id))
-        else if (sub === '/update') sendJson(res, 200, await updateOne(id))
-        else if (sub === '/uninstall') sendJson(res, 200, await uninstallOne(id))
-        else if (sub === '/enable') sendJson(res, 200, await setEnabled(id, true))
-        else sendJson(res, 200, await setEnabled(id, false))
+        if (sub === '/install') sendJson(res, 200, await exclusive(() => installOne(id)))
+        else if (sub === '/update') sendJson(res, 200, await exclusive(() => updateOne(id)))
+        else if (sub === '/uninstall') sendJson(res, 200, await exclusive(() => uninstallOne(id)))
+        else if (sub === '/enable') sendJson(res, 200, await exclusive(() => setEnabled(id, true)))
+        else sendJson(res, 200, await exclusive(() => setEnabled(id, false)))
         return
       }
       sendJson(res, 404, { ok: false, code: 'not-found', message: 'unknown plugin-center route' })
     } catch (error) {
+      if (error instanceof RequestError) {
+        sendJson(res, error.status, { ok: false, code: error.code, message: error.message })
+        return
+      }
       sendJson(res, 500, {
         ok: false,
         code: 'internal',
@@ -384,15 +649,37 @@ export function apply(ctx: Context, config: Config = {}): void {
 
 /** Write one JSON response. */
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
-  res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' })
+  res.writeHead(status, {
+    'content-type': 'application/json; charset=utf-8',
+    'cache-control': 'no-store',
+    'x-content-type-options': 'nosniff',
+  })
   res.end(JSON.stringify(body))
 }
 
-/** Read a request body as parsed JSON (empty body reads as `{}`). */
+/**
+ * Read a request body as parsed JSON (empty body reads as `{}`). Oversized
+ * bodies are rejected before buffering, and malformed JSON maps to a 400
+ * rather than a 500.
+ */
 async function readJsonBody(req: IncomingMessage): Promise<unknown> {
+  const declared = Number(req.headers['content-length'] ?? 0)
+  if (Number.isFinite(declared) && declared > MAX_BODY_BYTES) {
+    throw new RequestError(413, 'payload-too-large', 'request body too large')
+  }
   const chunks: Buffer[] = []
-  for await (const chunk of req) chunks.push(chunk as Buffer)
+  let total = 0
+  for await (const chunk of req) {
+    const buffer = chunk as Buffer
+    total += buffer.length
+    if (total > MAX_BODY_BYTES) throw new RequestError(413, 'payload-too-large', 'request body too large')
+    chunks.push(buffer)
+  }
   const raw = Buffer.concat(chunks).toString('utf8')
   if (raw.trim() === '') return {}
-  return JSON.parse(raw)
+  try {
+    return JSON.parse(raw)
+  } catch {
+    throw new RequestError(400, 'bad-json', 'request body is not valid JSON')
+  }
 }

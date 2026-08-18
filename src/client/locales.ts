@@ -51,10 +51,8 @@ export type PluginCenterKey =
   | 'empty'
   | 'emptySearch'
   | 'disabled'
+  | 'enableFeature'
   | 'githubError'
-  | 'card.title'
-  | 'card.description'
-  | 'card.enable'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
@@ -110,11 +108,9 @@ export const zh: Record<PluginCenterKey, string> = {
   'retry': '重试',
   'empty': '暂无插件',
   'emptySearch': '没有匹配的插件',
-  'disabled': '插件中心已停用，请在「设置 → 插件 → 插件配置」中开启。',
+  'disabled': '插件中心已停用。',
+  'enableFeature': '启用插件中心',
   'githubError': '无法加载插件列表：{message}',
-  'card.title': '插件中心',
-  'card.description': '在「对话 / 轨迹」标签旁显示插件中心，实时读取 awesome-dsh-plugin.com 精选插件并按热度排序。',
-  'card.enable': '启用插件中心',
 }
 
 /** English dictionary. */
@@ -164,9 +160,7 @@ export const en: Record<PluginCenterKey, string> = {
   'retry': 'Retry',
   'empty': 'No plugins',
   'emptySearch': 'No matching plugins',
-  'disabled': 'Plugin Center is disabled. Enable it in Settings → Plugins → Plugin configuration.',
+  'disabled': 'Plugin Center is disabled.',
+  'enableFeature': 'Enable Plugin Center',
   'githubError': 'Could not load the plugin list: {message}',
-  'card.title': 'Plugin Center',
-  'card.description': 'Shows the Plugin Center beside the Chat/Trajectory tabs, reading curated plugins from awesome-dsh-plugin.com and ranking them by stars.',
-  'card.enable': 'Enable Plugin Center',
 }

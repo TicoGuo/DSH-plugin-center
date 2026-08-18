@@ -5,12 +5,19 @@
  * durable boundary.
  */
 
-import { appendFileSync, existsSync, readFileSync } from 'node:fs'
+import { appendFileSync, existsSync, readFileSync, renameSync, rmSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import type { PluginOperation, PluginOperationLogEntry } from './types.ts'
 
 /** Log filename inside the profile directory. */
 export const OPERATION_LOG_FILENAME = 'plugin-center.log'
+
+/**
+ * Size cap on the active log. When appending would exceed it, the current
+ * file rotates to `plugin-center.log.1` (previous backup is dropped) so the
+ * file stays bounded forever.
+ */
+export const OPERATION_LOG_MAX_BYTES = 1_000_000
 
 /**
  * Serialize one log entry to its JSONL line.
@@ -74,7 +81,21 @@ export function appendOperationLog(
     ok,
     message,
   }
-  appendFileSync(join(profileDir, OPERATION_LOG_FILENAME), formatLogLine(entry) + '\n', 'utf8')
+  const path = join(profileDir, OPERATION_LOG_FILENAME)
+  rotateIfNeeded(path)
+  appendFileSync(path, formatLogLine(entry) + '\n', 'utf8')
+}
+
+/** Rotate the log file when it exceeds the cap; failures degrade to a plain append. */
+function rotateIfNeeded(path: string): void {
+  try {
+    if (!existsSync(path) || statSync(path).size <= OPERATION_LOG_MAX_BYTES) return
+    const backup = `${path}.1`
+    rmSync(backup, { force: true })
+    renameSync(path, backup)
+  } catch {
+    // Rotation is best-effort; an unbounded append is preferable to losing the entry.
+  }
 }
 
 /**

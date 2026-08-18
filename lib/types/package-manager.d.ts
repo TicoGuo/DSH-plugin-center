@@ -20,6 +20,22 @@ export interface PackageManager {
     /** Update an installed package to its latest resolvable version. */
     update(profileDir: string, packageName: string): Promise<PackageManagerResult>;
 }
+/** Cap on one pnpm command so a stalled network degrades to a failure instead of a hung request. */
+export declare const PNPM_TIMEOUT_MS: number;
+/**
+ * pnpm arguments reach the shell on Windows (`shell: true`), so every argument
+ * is validated against a strict character allowlist before anything is
+ * spawned. npm specs (`pkg@1.2.3`), git specs (`github:owner/repo#path:/x`),
+ * scoped names (`@scope/name`) and temp tarball paths (with `\`) are all
+ * covered; shell metacharacters (`& | < > ^ % ! ( ) " ' \`` and whitespace) are
+ * rejected — a hostile catalog row can never escalate to a second command.
+ */
+export declare const SAFE_PNPM_ARG: RegExp;
+/**
+ * Reject an argument that could inject shell syntax.
+ * @param argument - the argument about to reach pnpm.
+ */
+export declare function assertSafePnpmArg(argument: string): void;
 /** The production pnpm-backed package manager. */
 export declare function createPnpmPackageManager(): PackageManager;
 //# sourceMappingURL=package-manager.d.ts.map

@@ -1,3 +1,6 @@
 # Build artifacts that pnpm/git installs do not need.
 lib/**/*.map
 lib/**/*.tsbuildinfo
+
+# Local dependency links created for offline builds (pnpm install recreates real deps).
+node_modules/

@@ -2,22 +2,40 @@
 
 import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
+import type { SnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
 import { IconCordisPluginOutline14 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { SidebarFooterActionOwnerProps } from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import { PluginCenterView, type PluginCenterViewInjected } from './PluginCenterView.tsx'
 import css from './PluginCenterSidebarButton.module.css'
 
-/** Registration-side face the sidebar button injects. */
-export type PluginCenterSidebarButtonFace = PluginCenterViewInjected
+/** Registration-side face the sidebar button injects (the view ops plus the feature flag store). */
+export interface PluginCenterSidebarButtonFace extends PluginCenterViewInjected {
+  /** Flip the plugin-center feature flag; the store is refreshed on success. */
+  setFeatureEnabled: (enabled: boolean) => Promise<{ ok: boolean; enabled: boolean }>
+  /** The shared feature-enabled flag (`null` until the status resolves). */
+  hooks: {
+    featureEnabled: SnapshotStore<{ enabled: boolean | null }>
+  }
+}
 
 /** The footer button plus the right-panel overlay it toggles. */
 export function PluginCenterSidebarButton({
-  t, wide, list, refresh, install, uninstall, update, setEnabled,
+  t,
+  wide,
+  useFeatureEnabled,
+  setFeatureEnabled,
+  list,
+  refresh,
+  install,
+  uninstall,
+  update,
+  setEnabled,
 }: InjectFace<PluginCenterSidebarButtonFace> & SidebarFooterActionOwnerProps & PropsLocale<'pluginCenter'>): ReactNode {
   const [open, setOpen] = useState(false)
   const [left, setLeft] = useState(0)
   const buttonRef = useRef<HTMLButtonElement>(null)
+  const featureEnabled = useFeatureEnabled(value => value.enabled)
 
   useEffect(() => {
     if (!open) return
@@ -55,6 +73,8 @@ export function PluginCenterSidebarButton({
             uninstall={uninstall}
             update={update}
             setEnabled={setEnabled}
+            featureEnabled={featureEnabled}
+            setFeatureEnabled={setFeatureEnabled}
           />
         </div>
       )}

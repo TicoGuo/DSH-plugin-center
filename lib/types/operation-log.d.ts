@@ -8,6 +8,12 @@ import type { PluginOperation, PluginOperationLogEntry } from './types.ts';
 /** Log filename inside the profile directory. */
 export declare const OPERATION_LOG_FILENAME = "plugin-center.log";
 /**
+ * Size cap on the active log. When appending would exceed it, the current
+ * file rotates to `plugin-center.log.1` (previous backup is dropped) so the
+ * file stays bounded forever.
+ */
+export declare const OPERATION_LOG_MAX_BYTES = 1000000;
+/**
  * Serialize one log entry to its JSONL line.
  * @param entry - the entry to serialize.
  * @returns one line without a trailing newline.

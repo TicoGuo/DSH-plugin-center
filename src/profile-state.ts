@@ -7,7 +7,7 @@
  * repo slug, so the resolved name is remembered here).
  */
 
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
   DEFAULT_PROFILE_BUNDLES,
@@ -23,7 +23,7 @@ export const PLUGIN_CENTER_STATE_FILENAME = 'plugin-center.json'
 
 /** The sidecar document shape. */
 interface PluginCenterStateFile {
-  readonly enabled?: boolean
+  readonly enabled: boolean
   readonly disabled: readonly string[]
   readonly packages: Readonly<Record<string, string>>
 }
@@ -137,10 +137,12 @@ export function writeProfileState(
     disabled: [...disabledNames].sort(),
     packages: Object.fromEntries([...packages.entries()].sort(([left], [right]) => left.localeCompare(right))),
   }
-  writeFileSync(
-    join(profileDir, PLUGIN_CENTER_STATE_FILENAME),
-    JSON.stringify(sidecar, undefined, 2) + '\n',
-  )
+  // Write the sidecar atomically (temp file + rename) so a crash mid-write
+  // leaves the previous sidecar intact instead of a truncated JSON document.
+  const target = join(profileDir, PLUGIN_CENTER_STATE_FILENAME)
+  const temporary = `${target}.tmp`
+  writeFileSync(temporary, JSON.stringify(sidecar, undefined, 2) + '\n')
+  renameSync(temporary, target)
 }
 
 /**

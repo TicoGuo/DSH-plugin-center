@@ -227,6 +227,55 @@
   cursor: pointer;
 }
 
+/* ── disabled panel (feature off) ───────────────────────────────────────── */
+
+.disabled {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  margin: 64px auto 0;
+  max-width: 360px;
+  text-align: center;
+}
+
+.disabled p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.disabled button {
+  appearance: none;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 999px;
+  padding: 7px 22px;
+  background: var(--dsw-alias-label-primary);
+  color: var(--dsw-alias-bg-layer-3);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity .16s;
+}
+
+.disabled button:hover:not(:disabled) {
+  opacity: 0.85;
+}
+
+.disabled button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.disabled .error {
+  margin: 0;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-state-error-primary);
+}
+
 /* ── card grid ──────────────────────────────────────────────────────────── */
 
 .cards {

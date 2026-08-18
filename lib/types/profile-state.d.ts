@@ -23,6 +23,8 @@ export interface ProfilePluginState {
 /** Read profile manifest plus the parsed plugin-center sidecar. */
 export interface LoadedProfileState {
     readonly manifest: ProfileManifest;
+    /** Whether the Plugin Center feature is enabled (sidecar-owned). */
+    readonly enabled: boolean;
     readonly plugins: ProfilePluginState;
 }
 /**
@@ -41,14 +43,15 @@ export declare function ensureProfileDir(profileDir: string, profileName: string
  */
 export declare function readProfileState(profileDir: string): LoadedProfileState;
 /**
- * Persist the manifest's bundle list and the sidecar (disabled list + id→name
- * mapping) together so a mutation cannot leave them disagreeing.
+ * Persist the manifest's bundle list and the sidecar (enabled flag + disabled
+ * list + id→name mapping) together so a mutation cannot leave them disagreeing.
  * @param profileDir - the absolute profile directory.
  * @param manifest - the manifest to write (its `dsh.profile.bundles` must already reflect the change).
+ * @param enabled - whether the Plugin Center feature is enabled.
  * @param disabledNames - the full disabled-name set to persist.
  * @param packages - the full catalog-id → package-name mapping to persist.
  */
-export declare function writeProfileState(profileDir: string, manifest: ProfileManifest, disabledNames: ReadonlySet<string>, packages: ReadonlyMap<string, string>): void;
+export declare function writeProfileState(profileDir: string, manifest: ProfileManifest, enabled: boolean, disabledNames: ReadonlySet<string>, packages: ReadonlyMap<string, string>): void;
 /**
  * Copy a manifest with one bundle appended to the layer list (deduplicated).
  * @param manifest - the current manifest.
