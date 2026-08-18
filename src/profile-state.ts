@@ -66,17 +66,19 @@ export function ensureProfileDir(profileDir: string, profileName: string): strin
 /**
  * Parse the plugin-center sidecar, treating any missing or malformed field as
  * empty (the sidecar is best-effort durability, not the source of truth — the
- * manifest's bundles list remains authoritative).
+ * manifest's bundles list remains authoritative). `enabled` defaults to true,
+ * so the sidebar entry is present out of the box; only an explicit `false`
+ * disables the feature.
  * @param profileDir - the absolute profile directory.
  * @returns the parsed sidecar with safe defaults.
  */
 function readSidecar(profileDir: string): PluginCenterStateFile {
   const path = join(profileDir, PLUGIN_CENTER_STATE_FILENAME)
-  if (!existsSync(path)) return { enabled: false, disabled: [], packages: {} }
+  if (!existsSync(path)) return { enabled: true, disabled: [], packages: {} }
   try {
     const parsed = JSON.parse(readFileSync(path, 'utf8')) as Partial<PluginCenterStateFile> | null
-    if (parsed === null || typeof parsed !== 'object') return { enabled: false, disabled: [], packages: {} }
-    const enabled = parsed.enabled === true
+    if (parsed === null || typeof parsed !== 'object') return { enabled: true, disabled: [], packages: {} }
+    const enabled = parsed.enabled !== false
     const disabled = Array.isArray(parsed.disabled) && parsed.disabled.every(name => typeof name === 'string')
       ? parsed.disabled
       : []
@@ -85,7 +87,7 @@ function readSidecar(profileDir: string): PluginCenterStateFile {
       : {}
     return { enabled, disabled, packages }
   } catch {
-    return { enabled: false, disabled: [], packages: {} }
+    return { enabled: true, disabled: [], packages: {} }
   }
 }
 

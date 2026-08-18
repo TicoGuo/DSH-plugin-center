@@ -1,12 +1,12 @@
 /**
- * Plugin Center host half: an HTTP route tree plus a settings namespace.
+ * Plugin Center host half: a `/plugin-center` HTTP route tree.
  *
  * This is a third-party-installable plugin, so it cannot depend on the
  * harness's Typert Remote assembly (which is compiled in). Instead it registers
  * a `/plugin-center` prefix route on the web server — the same transport the
- * balance-check plugin uses — and a `plugin-center` settings namespace whose
- * `enabled` boolean (default off) is the on/off toggle rendered by the browser
- * card.
+ * balance-check plugin uses. The feature on/off flag lives in a profile sidecar
+ * (default on) and is flipped through `/plugin-center/status` + `/set-enabled`
+ * (no settings namespace, so no harness change is required).
  *
  * The catalog is the curated awesome-dsh-plugin list; install/uninstall/update
  * forward to pnpm inside the managed profile (git specs resolve to a package
@@ -318,8 +318,8 @@ export function apply(ctx: Context, config: Config = {}): void {
     const pathname = (req.url ?? '/').split('?', 1)[0] ?? '/'
     const sub = pathname === '/plugin-center' ? '' : pathname.slice('/plugin-center'.length)
     try {
-      // Feature on/off (sidecar-owned). These two routes stay reachable even
-      // while disabled, so the settings card can read + flip the toggle.
+      // Feature on/off (sidecar-owned, default on). These two routes stay
+      // reachable even while disabled so the flag can be read + flipped.
       if (sub === '/status' && (req.method === 'GET' || req.method === 'HEAD')) {
         sendJson(res, 200, { ok: true, enabled: readProfileState(profileDir).enabled })
         return

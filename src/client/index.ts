@@ -1,7 +1,7 @@
 /**
- * Browser Plugin Center plugin: the conversation view tab (shown only while the
- * plugin is enabled) plus the settings enable card. It is a pure consumer of the
- * host `/plugin-center` HTTP routes and the `plugin-center` settings namespace.
+ * Browser Plugin Center plugin: the sidebar footer button (shown only while the
+ * plugin is enabled) plus its right-panel overlay. It is a pure consumer of the
+ * host `/plugin-center` HTTP routes (no settings namespace).
  */
 
 import type { Context } from '@deepseek-ai/cordis'
@@ -9,14 +9,10 @@ import type { PluginOperationResult } from '@ticoguo/dsh-plugin-center/types'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
 // Type-only: pulls the locale plugin's Context merge (ctx.locale).
 import type {} from '@deepseek-ai/dsh-client-locale/client'
-// Type-only: the settings-plugins section's `settings.plugin.item` SlotMap merge.
-import type {} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
 // Type-only: the sidebar's `sidebar.footer.action` SlotMap merge.
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import type { PluginCenterListResult, PluginCenterViewInjected } from './PluginCenterView.tsx'
-import { PluginCenterCard } from './PluginCenterCard.tsx'
 import { PluginCenterSidebarButton } from './PluginCenterSidebarButton.tsx'
-import { PluginCenterCardController } from './plugin-center-card.ts'
 import { en, NS, zh } from './locales.ts'
 
 export type { PluginCenterViewInjected } from './PluginCenterView.tsx'
@@ -38,9 +34,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 /**
- * Client plugin body: register the settings enable card and, while enabled,
- * the sidebar footer button. The on/off flag is read from the host's
- * `/plugin-center/status` route (no settings namespace).
+ * Client plugin body: register the sidebar footer button while enabled. The
+ * on/off flag is read from the host's `/plugin-center/status` route (no
+ * settings namespace).
  * @param ctx - client root context.
  */
 export function apply(ctx: Context): void {
@@ -62,8 +58,6 @@ export function apply(ctx: Context): void {
       body: JSON.stringify({ id }),
     })
   const status = (): Promise<{ enabled: boolean }> => request<{ enabled: boolean }>('/status')
-  const setFeatureEnabled = (enabled: boolean): Promise<{ enabled: boolean }> =>
-    request<{ enabled: boolean }>('/set-enabled', { method: 'POST', body: JSON.stringify({ enabled }) })
 
   // Shared feature-enabled flag (sidecar-backed via the host routes).
   const enabledStore = createSnapshotStore<{ enabled: boolean }>({ enabled: false })
@@ -75,8 +69,8 @@ export function apply(ctx: Context): void {
   }
   refreshEnabled()
 
-  // The sidebar button is mounted only while the feature is enabled, so the
-  // default-off state never shows "插件中心" in the sidebar foot.
+  // The sidebar button is mounted only while the feature is enabled; the flag
+  // defaults to on, so a fresh install shows it immediately.
   let disposeButton: (() => void) | null = null
   const syncButton = (): void => {
     const enabled = enabledStore.getSnapshot().enabled
@@ -97,13 +91,4 @@ export function apply(ctx: Context): void {
   }
   syncButton()
   enabledStore.subscribe(syncButton)
-
-  const card = new PluginCenterCardController(status, setFeatureEnabled, refreshEnabled)
-  ctx.slots.inject('settings.plugin.item', () => ctx.slots.register({
-    name: 'settings.plugin.item',
-    id: 'plugin-center',
-    order: 20,
-    locale: NS,
-    inject: () => card.inject(),
-  }, PluginCenterCard))
 }
